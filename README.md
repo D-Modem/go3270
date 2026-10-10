@@ -113,6 +113,14 @@ HostExplorer and Quick3270 do. The formats are from
 [GA23-0059-07][ga23-07] (5.13, 5.38, 6.12, 6.51) and Greg Price's
 [3270 Graphics][grfx].
 
+ * IND$FILE file transfer, the host's side, in DFT mode: `ParseIndFile()`
+   reads the `IND$FILE GET|PUT name options` command an emulator types,
+   `SendFileDFT()` and `ReceiveFileDFT()` move the file, `DFTMessage()`
+   ends with IND$FILE's message (`TRANS03 File transfer complete`), and
+   `DFTBufferSize()` tells whether the terminal does DFT at all.
+   `ReadRecord()` reads one inbound record, structured fields and all.
+   The layouts are a real TSO IND$FILE's, from x3270's test traces.
+
 Fixes: a query reply too short to be one (length 0 to 3) no longer panics
 `NegotiateTelnet()`, the query replies a client may send are limited to
 16 KB, and encoded field text is telnet-escaped.

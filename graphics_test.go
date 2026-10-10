@@ -15,11 +15,11 @@ import (
 // Load PS (extended), formats 1 and 3, 9x16 slots, the base set, the GE
 // set and two loadable sets
 var charsetReply = []byte{0x81, 0x85,
-	0xb2,                   // ALT, LOADABLE, EXT, GF
-	0x00,                   // slot size match required
-	9, 16,                  // SDW, SDH
+	0xb2,  // ALT, LOADABLE, EXT, GF
+	0x00,  // slot size match required
+	9, 16, // SDW, SDH
 	0x50, 0x00, 0x00, 0x00, // FORM: types 1 and 3
-	7,                                  // DL
+	7,                                        // DL
 	0x00, 0x00, 0x00, 0x02, 0xb9, 0x04, 0x17, // base: CGCSGID 697/1047
 	0x01, 0x00, 0xf1, 0x03, 0xc3, 0x01, 0x36, // GE set
 	0x02, 0x80, 0xff, 0x00, 0x00, 0x00, 0x00, // loadable RWS 2
