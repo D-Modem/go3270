@@ -84,6 +84,18 @@ type Field struct {
 	// the screen is sent.
 	Name string
 
+	// CharSet is the local ID of the character set the field is shown in:
+	// 0 for the default; a programmed symbol set's LCID (see LoadPS). It is
+	// sent as an extended field attribute (SFE type 0x43), so it ends with
+	// the field.
+	CharSet byte
+
+	// Raw, if not nil, is sent as the field's content as it is, instead of
+	// Content encoded in the code page: the code points of programmed
+	// symbols (0x41 to 0xFE) in a CharSet field. Values in the values map do
+	// not replace it.
+	Raw []byte
+
 	// KeepSpaces will prevent the strings.TrimSpace() function from being
 	// called on the field value. Generally you want leading and trailing
 	// spaces trimmed from fields in 3270 before processing, but if you are
@@ -334,8 +346,13 @@ func showScreenInternal(screen Screen, values map[string]string,
 				content = val
 			}
 		}
-		if content != "" {
-			b.Write(cp.Encode(content))
+		// Encoded text is telnet-escaped: a code page may map a character
+		// (a C1 control in text from a user, say) to 0xFF, which would
+		// otherwise end the record or start a telnet command.
+		if fld.Raw != nil {
+			b.Write(telnetEscape(fld.Raw))
+		} else if content != "" {
+			b.Write(telnetEscape(cp.Encode(content)))
 		}
 
 		// If a writable field, add it to the field map. We add 1 to bufaddr
@@ -396,7 +413,8 @@ func buildField(f Field) []byte {
 		return buf.Bytes()
 	}
 
-	if f.Color == DefaultColor && f.Highlighting == DefaultHighlight {
+	if f.Color == DefaultColor && f.Highlighting == DefaultHighlight &&
+		f.CharSet == 0 {
 		// this is a traditional field, issue a normal sf command
 		buf.WriteByte(0x1d) // sf - "start field"
 		buf.WriteByte(sfAttribute(f.Write, f.Intense, f.Hidden, f.Autoskip,
@@ -411,6 +429,9 @@ func buildField(f Field) []byte {
 		paramCount++
 	}
 	if f.Highlighting != DefaultHighlight {
+		paramCount++
+	}
+	if f.CharSet != 0 {
 		paramCount++
 	}
 	buf.WriteByte(paramCount)
@@ -432,7 +453,13 @@ func buildField(f Field) []byte {
 		buf.WriteByte(byte(f.Color))
 	}
 
-	return buf.Bytes()
+	// Write the character set attribute
+	if f.CharSet != 0 {
+		buf.WriteByte(0x43)
+		buf.WriteByte(f.CharSet)
+	}
+
+	return telnetEscape(buf.Bytes())
 }
 
 // sfAttribute builds the attribute byte for the "start field" 3270 command

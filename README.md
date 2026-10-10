@@ -90,6 +90,36 @@ With the new codepage detection support, you shouldn't typically rely on the def
 
 Additionally, most characters from the "graphic escape" code page 310 are supported in all of the go3270-provided codepage implementations. Correct display on the client will depend on its support of graphic escape and correct characters being available in its font. The `DevInfo.SupportsGE()` function returns a boolean indicating that the client supports the graphic escape alternate code page. Use the corresponding Unicode characters in your Go UTF-8 strings and they will be sent as the EBCDIC two-byte sequence of 0x08 followed by the position in code page 310. GE sequences are also processed on incoming field values.
 
+Graphics and query replies (go3270-sec)
+---------------------------------------
+
+This fork keeps every query reply the client sends during
+`NegotiateTelnet()` and adds 3270 graphics:
+
+ * `DevInfo.QueryReply(qcode)` and `DevInfo.QueryCodes()` return the raw
+   query replies; `DevInfo.CellSize()` is the character cell in pels;
+   `DevInfo.SymbolSets()` describes the client's character sets and
+   programmed symbol support; `DevInfo.SupportsVectorGraphics()` reports
+   the Segment query reply (0xB0).
+ * `LoadPS` builds the Load Programmed Symbols structured field (formats 1
+   and 3) from `Symbol` bitmaps, and `WriteStructuredFields()` sends it.
+   A `Field` with `CharSet` set to the symbol set's LCID and `Raw` set to
+   the symbols' code points shows them.
+ * `ImagePicture()` builds an Object Picture structured field that draws
+   bitmaps with native 3270 vector graphics (experimental).
+
+The x3270 family supports none of these; IBM Personal Communications,
+HostExplorer and Quick3270 do. The formats are from
+[GA23-0059-07][ga23-07] (5.13, 5.38, 6.12, 6.51) and Greg Price's
+[3270 Graphics][grfx].
+
+Fixes: a query reply too short to be one (length 0 to 3) no longer panics
+`NegotiateTelnet()`, the query replies a client may send are limited to
+16 KB, and encoded field text is telnet-escaped.
+
+[ga23-07]: https://bitsavers.org/pdf/ibm/3174/GA23-0059-07_3270_Data_Stream_Programmers_Reference_199206.pdf
+[grfx]: https://www.prycroft6.com.au/misc/3270grfx.html
+
 3270 information
 ----------------
 

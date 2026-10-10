@@ -45,6 +45,29 @@ type DevInfo interface {
 	// escape to code page 310.
 	SupportsGE() bool
 
+	// QueryReply returns the client's query reply with the given QCODE
+	// (0x81 Usable Area, 0x85 Character Sets, 0xB0 Segment, ...), from the
+	// QCODE byte on, or nil if the client sent none. The slice is a copy.
+	QueryReply(qcode byte) []byte
+
+	// QueryCodes lists the QCODEs of the query replies the client sent, in
+	// ascending order.
+	QueryCodes() []byte
+
+	// CellSize is the size of the default character cell in pels, from the
+	// Usable Area query reply (0, 0 if the client did not say).
+	CellSize() (width, height int)
+
+	// SymbolSets describes the client's character sets and its support for
+	// loading programmed symbols (see LoadPS), from the Character Sets query
+	// reply; nil if the client sent none.
+	SymbolSets() *SymbolSets
+
+	// SupportsVectorGraphics reports whether the client answered the query
+	// with the Segment query reply (0xB0), which means it takes graphics
+	// segments: vector graphics in Object Picture structured fields.
+	SupportsVectorGraphics() bool
+
 	// Private version of AltDimensions() so callers can't fake us out; only
 	// real implementations returned by NegotiateTelnet() will work.
 	altDimensions() (rows, cols int)
@@ -85,6 +108,10 @@ var ErrTelnetError = errors.New("telnet or 3270 protocol error")
 var ErrUnknownTerminal = errors.New("unknown terminal type")
 
 var errOptionRejected = errors.New("option rejected")
+
+// maxQueryReplies is the most we read of a client's query replies: real
+// clients send a few hundred bytes.
+const maxQueryReplies = 16 * 1024
 
 // NegotiateTelnet will negotiate the options necessary for tn3270 on a new
 // telnet connection, conn.
@@ -360,7 +387,7 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		// Timeout. In this case, we'll assume it's because the client didn't
 		// reply to our query command. In that case, we'll return whatever
 		// we're already assuming.
-		return &deviceInfo{24, 80, termtype, nil, false}, nil
+		return &deviceInfo{rows: 24, cols: 80, termtype: termtype}, nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -370,13 +397,18 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		// structured field queries? If we're not getting the kind of reply
 		// we're expecting, we'll return whatever we're already assuming.
 		flushConnection(conn, 50*time.Millisecond)
-		return &deviceInfo{24, 80, termtype, nil, false}, nil
+		return &deviceInfo{rows: 24, cols: 80, termtype: termtype}, nil
 	}
 
-	// There are an arbitrary number of query reply structured fields. We are
-	// only interested in the "Usable Area" SFID=0x81 QCODE=0x81 field and
-	// "Character Sets" QCODE=0x85 field so we'll just consume any others.
-	// Consume all data until the EOR is received.
+	// There are an arbitrary number of query reply structured fields. We
+	// interpret the "Usable Area" SFID=0x81 QCODE=0x81 field, the
+	// "Character Sets" QCODE=0x85 field and "RPQ Names" QCODE=0xA1 field,
+	// and keep every reply as it came for DevInfo.QueryReply(). Consume all
+	// data until the EOR is received.
+	replies := map[byte][]byte{}
+	total := 0
+	var cellW, cellH int
+	var symbols *SymbolSets
 	for {
 		// Two bytes are big-endian length.
 		buf, err := telnetReadN(conn, 2)
@@ -390,6 +422,17 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 
 		var l int = int(buf[0])<<8 + int(buf[1])
 
+		// A query reply is at least the length, SFID and QCODE; anything
+		// shorter would have us index past the end of the field (or make a
+		// slice of negative length). A client may not send us more than
+		// maxQueryReplies bytes of replies in all.
+		if l < 4 {
+			return nil, ErrTelnetError
+		}
+		if total += l; total > maxQueryReplies {
+			return nil, ErrTelnetError
+		}
+
 		// Field length includes the 2 length bytes
 		buf, err = telnetReadN(conn, l-2)
 		if err != nil {
@@ -401,15 +444,22 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 
 		// Note that because length isn't at the beginning, offsets in buf are
 		// 2 less than in the 3270 data stream documentation.
+		if buf[0] == 0x81 {
+			if _, dup := replies[buf[1]]; !dup {
+				replies[buf[1]] = buf[1:]
+			}
+		}
 		if buf[0] == 0x81 && buf[1] == 0x81 {
 			// Usable Area
 			rows, cols, err = getUsableArea(buf)
 			if err != nil {
 				return nil, err
 			}
+			cellW, cellH = getCellSize(buf)
 		} else if buf[0] == 0x81 && buf[1] == 0x85 {
 			// Character Sets
 			cpid, hasGE = getCodepageID(buf)
+			symbols = getSymbolSets(buf)
 		} else if buf[0] == 0x81 && buf[1] == 0xA1 {
 			// RPQ Names. We use this  to determine if the client is x3270
 			// family.
@@ -434,7 +484,9 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		codepage = nil
 	}
 
-	return &deviceInfo{rows, cols, termtype, codepage, hasGE}, nil
+	return &deviceInfo{rows: rows, cols: cols, termtype: termtype,
+		codepage: codepage, hasGE: hasGE, replies: replies,
+		cellW: cellW, cellH: cellH, symbols: symbols}, nil
 }
 
 // getUsableArea processes the "Query Reply (Usable Area)" response to return
@@ -667,10 +719,13 @@ func telnetReadN(conn net.Conn, n int) ([]byte, error) {
 }
 
 type deviceInfo struct {
-	rows, cols int
-	termtype   string
-	codepage   Codepage
-	hasGE      bool
+	rows, cols   int
+	termtype     string
+	codepage     Codepage
+	hasGE        bool
+	replies      map[byte][]byte // query replies by QCODE, from the QCODE on
+	cellW, cellH int             // the default character cell, in pels
+	symbols      *SymbolSets
 }
 
 func (d *deviceInfo) AltDimensions() (rows, cols int) {
