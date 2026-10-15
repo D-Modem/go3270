@@ -100,13 +100,20 @@ This fork keeps every query reply the client sends during
    query replies; `DevInfo.CellSize()` is the character cell in pels;
    `DevInfo.SymbolSets()` describes the client's character sets and
    programmed symbol support; `DevInfo.SupportsVectorGraphics()` reports
-   the Segment query reply (0xB0).
+   the Segment query reply (0xB0), sent or listed in the Summary. Replies
+   the Summary lists that did not come with the Query are asked for with
+   a Query List: IBM Personal Communications sends its graphics replies
+   (Segment, Graphic Color and the rest) only then.
  * `LoadPS` builds the Load Programmed Symbols structured field (formats 1
    and 3) from `Symbol` bitmaps, and `WriteStructuredFields()` sends it.
    A `Field` with `CharSet` set to the symbol set's LCID and `Raw` set to
    the symbols' code points shows them.
  * `ImagePicture()` builds an Object Picture structured field that draws
    bitmaps with native 3270 vector graphics (experimental).
+   `ImagePictures()` crops each bitmap to what it draws, splits a picture
+   over 64K into several segments, and takes the mix: `MixOverpaint` for
+   an image as a bitmap a colour, which is what works on PCOMM (its
+   exclusive or does not combine blue with the other colours).
 
 The x3270 family supports none of these; IBM Personal Communications,
 HostExplorer and Quick3270 do. The formats are from

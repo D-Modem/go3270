@@ -402,73 +402,69 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 	}
 
 	// There are an arbitrary number of query reply structured fields. We
-	// interpret the "Usable Area" SFID=0x81 QCODE=0x81 field, the
-	// "Character Sets" QCODE=0x85 field and "RPQ Names" QCODE=0xA1 field,
-	// and keep every reply as it came for DevInfo.QueryReply(). Consume all
-	// data until the EOR is received.
+	// keep every reply as it came for DevInfo.QueryReply(), and interpret
+	// the "Usable Area" SFID=0x81 QCODE=0x81 field, the "Character Sets"
+	// QCODE=0x85 field and "RPQ Names" QCODE=0xA1 field.
 	replies := map[byte][]byte{}
 	total := 0
-	var cellW, cellH int
-	var symbols *SymbolSets
-	for {
-		// Two bytes are big-endian length.
-		buf, err := telnetReadN(conn, 2)
-		if err != nil {
-			return nil, err
-		}
-		if buf == nil {
-			// EOR. We're out of fields.
-			break
-		}
+	if err := readQueryReplies(conn, replies, &total); err != nil {
+		return nil, err
+	}
 
-		var l int = int(buf[0])<<8 + int(buf[1])
-
-		// A query reply is at least the length, SFID and QCODE; anything
-		// shorter would have us index past the end of the field (or make a
-		// slice of negative length). A client may not send us more than
-		// maxQueryReplies bytes of replies in all.
-		if l < 4 {
-			return nil, ErrTelnetError
-		}
-		if total += l; total > maxQueryReplies {
-			return nil, ErrTelnetError
-		}
-
-		// Field length includes the 2 length bytes
-		buf, err = telnetReadN(conn, l-2)
-		if err != nil {
-			return nil, err
-		}
-		if buf == nil {
-			return nil, ErrTelnetError
-		}
-
-		// Note that because length isn't at the beginning, offsets in buf are
-		// 2 less than in the 3270 data stream documentation.
-		if buf[0] == 0x81 {
-			if _, dup := replies[buf[1]]; !dup {
-				replies[buf[1]] = buf[1:]
+	// IBM Personal Communications lists its graphics replies (0xA8,
+	// 0xB0-0xB6) in its Summary but sends them only when asked for by
+	// name: ask, with a Query List, for whatever the Summary lists that
+	// did not come. A client that does not answer is not waited for long.
+	var missing []byte
+	if sum := replies[0x80]; len(sum) > 1 {
+		for _, q := range sum[1:] {
+			if _, ok := replies[q]; !ok && q != 0x80 {
+				missing = append(missing, q)
 			}
 		}
-		if buf[0] == 0x81 && buf[1] == 0x81 {
-			// Usable Area
-			rows, cols, err = getUsableArea(buf)
-			if err != nil {
+	}
+	if len(missing) > 0 {
+		sf := append([]byte{0x01, 0xff, 0x03, 0x00}, missing...) // Read Partition, Query List
+		rec := append([]byte{0xf3, byte((len(sf) + 2) >> 8), byte(len(sf) + 2)}, sf...)
+		if _, err := conn.Write(append(telnetEscape(rec), 0xff, 0xef)); err != nil {
+			return nil, err
+		}
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		b, valid, _, err := telnetRead(conn, true)
+		conn.SetReadDeadline(time.Time{})
+		switch {
+		case err != nil && errors.Is(err, os.ErrDeadlineExceeded):
+			// no answer: what came first will do
+		case err != nil:
+			return nil, err
+		case valid && b == byte(aidQueryResponse):
+			if err := readQueryReplies(conn, replies, &total); err != nil {
 				return nil, err
 			}
-			cellW, cellH = getCellSize(buf)
-		} else if buf[0] == 0x81 && buf[1] == 0x85 {
-			// Character Sets
-			cpid, hasGE = getCodepageID(buf)
-			symbols = getSymbolSets(buf)
-		} else if buf[0] == 0x81 && buf[1] == 0xA1 {
-			// RPQ Names. We use this  to determine if the client is x3270
-			// family.
-			isx3270 = getRPQNames(buf)
-		} else {
-			// Not a field we're interested in
-			continue
+		default:
+			flushConnection(conn, 50*time.Millisecond)
 		}
+	}
+
+	var cellW, cellH int
+	var symbols *SymbolSets
+	if r, ok := replies[0x81]; ok {
+		buf := append([]byte{0x81}, r...)
+		var err error
+		if rows, cols, err = getUsableArea(buf); err != nil {
+			return nil, err
+		}
+		cellW, cellH = getCellSize(buf)
+	}
+	if r, ok := replies[0x85]; ok {
+		buf := append([]byte{0x81}, r...)
+		cpid, hasGE = getCodepageID(buf)
+		symbols = getSymbolSets(buf)
+	}
+	if r, ok := replies[0xa1]; ok {
+		// RPQ Names. We use this to determine if the client is x3270
+		// family.
+		isx3270 = getRPQNames(append([]byte{0x81}, r...))
 	}
 
 	if cpfunc, ok := codepageToFunction[cpid]; ok {
@@ -598,6 +594,54 @@ func UnNegotiateTelnet(conn net.Conn, timeout time.Duration) error {
 	conn.Write([]byte{iac, dont, terminalType})
 	flushConnection(conn, timeout)
 	return nil
+}
+
+// readQueryReplies reads query reply structured fields (the AID read
+// already) to the EOR, keeping each in replies by QCODE, from the QCODE on
+// (the first of a QCODE kept). total counts the bytes read, at most
+// maxQueryReplies in all.
+func readQueryReplies(conn net.Conn, replies map[byte][]byte, total *int) error {
+	for {
+		// Two bytes are big-endian length.
+		buf, err := telnetReadN(conn, 2)
+		if err != nil {
+			return err
+		}
+		if buf == nil {
+			// EOR. We're out of fields.
+			return nil
+		}
+
+		var l int = int(buf[0])<<8 + int(buf[1])
+
+		// A query reply is at least the length, SFID and QCODE; anything
+		// shorter would have us index past the end of the field (or make a
+		// slice of negative length). A client may not send us more than
+		// maxQueryReplies bytes of replies in all.
+		if l < 4 {
+			return ErrTelnetError
+		}
+		if *total += l; *total > maxQueryReplies {
+			return ErrTelnetError
+		}
+
+		// Field length includes the 2 length bytes
+		buf, err = telnetReadN(conn, l-2)
+		if err != nil {
+			return err
+		}
+		if buf == nil {
+			return ErrTelnetError
+		}
+
+		// Note that because length isn't at the beginning, offsets in buf are
+		// 2 less than in the 3270 data stream documentation.
+		if buf[0] == 0x81 {
+			if _, dup := replies[buf[1]]; !dup {
+				replies[buf[1]] = buf[1:]
+			}
+		}
+	}
 }
 
 // flushConnection discards all bytes that it can read from conn, allowing up

@@ -404,3 +404,143 @@ func ImagePicture(x, y int, planes ...Bitmap) ([]byte, error) {
 		byte(segLen>>8), byte(segLen), 0, 0, 0, 0)
 	return append(sf, seg.Bytes()...), nil
 }
+
+// Mix is how a picture's pels combine with what is already drawn.
+type Mix byte
+
+const (
+	MixOverpaint Mix = 2 // the color drawn replaces what was there
+	MixXor       Mix = 4 // exclusive or: a blue and a red plane make pink
+)
+
+// maxSegment is the most a graphics segment holds here: its length is two
+// bytes, and the structured field around it has its own header.
+const maxSegment = 0xffff - 64
+
+// PictureOptions are ImagePictures' options.
+type PictureOptions struct {
+	// Mix is how pels combine with what is drawn: MixOverpaint for an
+	// image with a bitmap a color, each pel in one (exclusive or does not
+	// combine blue with the other colors on IBM Personal Communications);
+	// MixXor if 0.
+	Mix Mix
+	// Segment is the number of the first graphics segment (named "B001"
+	// on): pictures sent together need segments of their own. 1 if 0.
+	Segment int
+}
+
+// ImagePictures is Object Picture structured fields, for
+// WriteStructuredFields, that draw bitmaps with their top left corner at
+// x, y (graphics coordinates, 0, 0 the middle of the screen, y upwards),
+// and the number of the next segment, for pictures sent with these.
+//
+// Unlike ImagePicture, each bitmap is cropped to its pels that are on,
+// and a picture too large for one segment (64K) is split into several,
+// each in its own structured field, a bitmap into bands of rows if need
+// be.
+func ImagePictures(x, y int, o PictureOptions, planes ...Bitmap) ([][]byte, int, error) {
+	mix, first := o.Mix, o.Segment
+	if mix == 0 {
+		mix = MixXor
+	}
+	if first < 1 {
+		first = 1
+	}
+	var parts [][]byte // images: Set Current Position, Set Color, Begin Image .. End Image
+	for _, p := range planes {
+		if len(p.Rows) == 0 {
+			continue
+		}
+		w := len(p.Rows[0])
+		on := func(c byte) bool { return c == '#' || c == 'X' || c == 'x' || c == '1' || c == '*' }
+		top, bottom, left, right := -1, -1, w, -1
+		for r, row := range p.Rows {
+			if len(row) != w {
+				return nil, 0, errors.New("go3270: image rows of different lengths")
+			}
+			for c := 0; c < w; c++ {
+				if on(row[c]) {
+					if top < 0 {
+						top = r
+					}
+					bottom = r
+					left, right = min2(left, c), max2(right, c)
+				}
+			}
+		}
+		if top < 0 {
+			continue // nothing to draw
+		}
+		cw := right - left + 1
+		if cw > 2040 || bottom-top+1 > 2040 {
+			return nil, 0, errors.New("go3270: image too large")
+		}
+		bpr := (cw + 7) / 8
+		// rows a band, each band an image of its own, under a segment
+		band := (maxSegment - 2 - 24) / (2 + bpr)
+		for r0 := top; r0 <= bottom; r0 += band {
+			r1 := min2(r0+band-1, bottom)
+			var b bytes.Buffer
+			px, py := x+left, y-r0
+			b.Write([]byte{0x21, 4, byte(px >> 8), byte(px), byte(py >> 8), byte(py)}) // Set Current Position
+			b.Write([]byte{0x0a, gocaColor(p.Color)})                                  // Set Color
+			h := r1 - r0 + 1
+			b.Write([]byte{0x91, 6, 0, 0, byte(cw >> 8), byte(cw), byte(h >> 8), byte(h)}) // Begin Image
+			for _, row := range p.Rows[r0 : r1+1] {
+				line := make([]byte, bpr)
+				for c := 0; c < cw; c++ {
+					if on(row[left+c]) {
+						line[c/8] |= 0x80 >> (c % 8)
+					}
+				}
+				b.Write([]byte{0x92, byte(bpr)}) // Image Data
+				b.Write(line)
+			}
+			b.Write([]byte{0x93, 2, 0, 0}) // End Image
+			parts = append(parts, b.Bytes())
+		}
+	}
+	// into segments: each its Set Mix and as many images as fit
+	var segs [][]byte
+	var seg []byte
+	for _, part := range parts {
+		if len(seg) > 0 && len(seg)+len(part) > maxSegment {
+			segs = append(segs, seg)
+			seg = nil
+		}
+		if len(seg) == 0 {
+			seg = []byte{0x0c, byte(mix)} // Set Mix
+		}
+		seg = append(seg, part...)
+	}
+	if len(seg) > 0 {
+		segs = append(segs, seg)
+	}
+	if first+len(segs) > 1000 {
+		return nil, 0, errors.New("go3270: too many segments")
+	}
+	var out [][]byte
+	for i, seg := range segs {
+		n := first + i
+		sf := []byte{0x0f, 0x10, 0x00, 0xc0, 0x00} // Object Picture, PID 0, first and last, immediate
+		// Begin Segment: name "B001".. (EBCDIC), visible, no highlight, new segment
+		sf = append(sf, 0x70, 12, 0xc2, 0xf0+byte(n/100), 0xf0+byte(n/10%10), 0xf0+byte(n%10), 0x74, 0x68,
+			byte(len(seg)>>8), byte(len(seg)), 0, 0, 0, 0)
+		out = append(out, append(sf, seg...))
+	}
+	return out, first + len(segs), nil
+}
+
+func min2(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max2(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

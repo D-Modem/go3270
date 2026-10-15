@@ -174,7 +174,7 @@ func (s *sess) menu() error {
 		text(5, 1, "1 Test pattern, one plane    2 Color bars, 3 planes    3 Color bars, 7 bitmaps", go3270.Green),
 		text(6, 1, "4 Corner markers (origin)    5 Image file    9 Ask for the replies not sent", go3270.Green),
 		text(7, 1, "6 Erase/Reset (clears graphics)   7 Send the hex below   8 Query replies, hex", go3270.Green),
-		text(9, 1, "Origin", go3270.Turquoise), text(9, 26, "C middle, y up; B bottom left; T top left, y down", go3270.Blue),
+		text(9, 1, "Origin", go3270.Turquoise), text(9, 26, "C middle, B bottom left (y up both)", go3270.Blue),
 		text(10, 1, "At row, col", go3270.Turquoise), text(10, 30, "the picture's top left, in character cells", go3270.Blue),
 		text(11, 1, "Size", go3270.Turquoise), text(11, 26, "S small, M medium, L to the screen's edge", go3270.Blue),
 		text(12, 1, "Mix", go3270.Turquoise), text(12, 26, "X exclusive or (planes make 8 colors), O overpaint", go3270.Blue),
@@ -211,7 +211,7 @@ func (s *sess) menu() error {
 		return io.EOF
 	}
 	v := func(k string) string { return strings.ToUpper(strings.TrimSpace(strings.Trim(resp.Values[k], "\x00"))) }
-	if o := v("origin"); strings.Contains("CBT", o) && o != "" {
+	if o := v("origin"); strings.Contains("CB", o) && o != "" {
 		s.set.origin = o
 	}
 	if n, err := strconv.Atoi(v("row")); err == nil && n >= 0 && n < s.rows {
@@ -314,14 +314,6 @@ func (s *sess) sizePels() (int, int) {
 		w, h = maxW, maxH
 	}
 	w, h = imin(w, maxW), imin(h, maxH)
-	// the planes in one segment: under 64K (7 bitmaps for an image overpainted)
-	n := 3
-	if s.set.mix == "O" {
-		n = len(s.palette().colors) - 1 // a bitmap a color, black not drawn
-	}
-	for n*((w+7)/8)*h > 60000 {
-		w, h = w*9/10, h*9/10
-	}
 	return imax(w, 8), imax(h, 8)
 }
 
@@ -331,8 +323,6 @@ func (s *sess) position(row, col int) (int, int) {
 	switch s.set.origin {
 	case "B":
 		return col * s.cellW, (s.rows - row) * s.cellH
-	case "T":
-		return col * s.cellW, row * s.cellH
 	}
 	return col*s.cellW - s.cols*s.cellW/2, s.rows*s.cellH/2 - row*s.cellH
 }
@@ -340,7 +330,7 @@ func (s *sess) position(row, col int) (int, int) {
 // show sends the test's screen and its picture, in the order the settings
 // say, and waits for Enter (PF5 sends the picture again).
 func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
-	sf, err := picture(x, y, s.set.mix, planes)
+	sfs, err := picture(x, y, s.set.mix, 1, planes)
 	if err != nil {
 		s.msg = err.Error()
 		return nil
@@ -356,8 +346,8 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 	}
 	scr := go3270.Screen{
 		text(0, 1, trunc(caption, s.cols-2), go3270.Turquoise),
-		text(1, 1, fmt.Sprintf("at %d,%d (origin %s, mix %s, graphics %s the screen), %d bytes", x, y, s.set.origin,
-			s.set.mix, map[string]string{"A": "after", "B": "before"}[s.set.order], len(sf)), go3270.Blue),
+		text(1, 1, fmt.Sprintf("at %d,%d (origin %s, mix %s, graphics %s the screen), %s", x, y, s.set.origin,
+			s.set.mix, map[string]string{"A": "after", "B": "before"}[s.set.order], size(sfs)), go3270.Blue),
 		text(s.rows-1, 1, "Enter=back  PF5=send the picture again  PF6=Erase/Reset", go3270.Blue),
 	}
 	scr = append(scr, input(s.rows-2, 1, 1, "x")...)
@@ -369,7 +359,7 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 			}
 		}
 		s.c.mark("Object Picture")
-		return go3270.WriteStructuredFields(s.c, sf)
+		return go3270.WriteStructuredFields(s.c, sfs...)
 	}
 	for {
 		o := s.opts()
@@ -420,11 +410,11 @@ func (s *sess) corners() error {
 	var names []string
 	for _, m := range marks {
 		x, y := s.position(m.row, m.col)
-		sf, err := picture(x, y, s.set.mix, sq(m.color))
+		sf, err := picture(x, y, s.set.mix, len(sfs)+1, sq(m.color))
 		if err != nil {
 			return err
 		}
-		sfs = append(sfs, sf)
+		sfs = append(sfs, sf...)
 		names = append(names, fmt.Sprintf("%s %d,%d", m.name, x, y))
 	}
 	scr := go3270.Screen{
@@ -523,20 +513,28 @@ func (s *sess) replies() error {
 
 // --- pictures
 
-// picture is an Object Picture of the planes at x, y: go3270's, with
-// overpaint in place of exclusive or when mix says O.
-func picture(x, y int, mix string, planes []go3270.Bitmap) ([]byte, error) {
-	sf, err := go3270.ImagePicture(x, y, planes...)
-	if err != nil {
-		return nil, err
-	}
+// picture is Object Pictures of the planes at x, y, from segment on:
+// overpainted when mix says O, else exclusive or.
+func picture(x, y int, mix string, segment int, planes []go3270.Bitmap) ([][]byte, error) {
+	o := go3270.PictureOptions{Mix: go3270.MixXor, Segment: segment}
 	if mix == "O" {
-		// the Set Mix order (0C 04) after Begin Segment's 14 bytes
-		if i := 5 + 14; len(sf) > i+1 && sf[i] == 0x0c {
-			sf[i+1] = 0x02 // overpaint
-		}
+		o.Mix = go3270.MixOverpaint
 	}
-	return sf, nil
+	sfs, _, err := go3270.ImagePictures(x, y, o, planes...)
+	return sfs, err
+}
+
+// size is how long structured fields are in all, with their lengths, and
+// how many: "22505 bytes" or "70012 bytes in 2 pictures".
+func size(sfs [][]byte) string {
+	n := 0
+	for _, sf := range sfs {
+		n += len(sf) + 2
+	}
+	if len(sfs) == 1 {
+		return fmt.Sprintf("%d bytes", n)
+	}
+	return fmt.Sprintf("%d bytes in %d pictures", n, len(sfs))
 }
 
 func blank(w, h int) [][]byte {
