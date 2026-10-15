@@ -132,7 +132,11 @@ structured fields typed in hex.
 
 With `-preview DIR`, each picture is also written to DIR as a PNG of what
 the terminal should show, for comparison with what it does show. With mix
-O the image goes as a bitmap per colour, overpainted, with no exclusive or.
+O the image goes as a bitmap per colour, overpainted, with no exclusive or,
+diffused (Floyd-Steinberg) to the terminal's own palette from its Graphic
+Color query reply: PCOMM's has 15 colours besides black (orange, purple,
+the dark shades, grey). A terminal without the reply gets the 8 base
+colours.
 Test 9 sends a Query List for any replies the Summary lists but the
 terminal didn't send (PCOMM lists its graphics replies but doesn't send
 them for a plain Query). The

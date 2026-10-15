@@ -23,9 +23,11 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -285,7 +287,13 @@ func (s *sess) picture(test string) error {
 			s.msg = err.Error()
 			return nil
 		}
-		planes = dither(img, w, h, s.set.mix)
+		if s.set.mix == "O" {
+			pal := s.palette()
+			planes = quantize(img, w, h, pal)
+			logger.Printf("#%d palette (%s): %s", s.c.id, pal.from, pal)
+		} else {
+			planes = dither(img, w, h)
+		}
 		what = fmt.Sprintf("%s: %s, drawn %dx%d", filepath.Base(*imageFile), describe(*imageFile, img),
 			len(planes[0].Rows[0]), len(planes[0].Rows))
 		logger.Printf("#%d image %s: %s, drawn %dx%d", s.c.id, *imageFile, describe(*imageFile, img),
@@ -309,7 +317,7 @@ func (s *sess) sizePels() (int, int) {
 	// the planes in one segment: under 64K (7 bitmaps for an image overpainted)
 	n := 3
 	if s.set.mix == "O" {
-		n = 7
+		n = len(s.palette().colors) - 1 // a bitmap a color, black not drawn
 	}
 	for n*((w+7)/8)*h > 60000 {
 		w, h = w*9/10, h*9/10
@@ -340,7 +348,7 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 	if *preview != "" {
 		s.shots++
 		name := filepath.Join(*preview, fmt.Sprintf("gfxtest-%d-%d.png", s.c.id, s.shots))
-		if err := writePreview(name, s.set.mix, planes); err != nil {
+		if err := writePreview(name, s.set.mix, s.palette(), planes); err != nil {
 			logger.Printf("#%d preview: %v", s.c.id, err)
 		} else {
 			logger.Printf("#%d preview of the picture: %s", s.c.id, name)
@@ -630,7 +638,7 @@ var gocaRGB = []color.RGBA{{0, 0, 0, 255}, {0, 0, 255, 255}, {255, 0, 0, 255}, {
 // writePreview draws the planes as the terminal should (each pel's
 // colors exclusive-or'd, or the last on top for mix O) to a PNG, each pel
 // 2x2.
-func writePreview(name, mix string, planes []go3270.Bitmap) error {
+func writePreview(name, mix string, pal palette, planes []go3270.Bitmap) error {
 	w, h := 0, 0
 	for _, p := range planes {
 		h = imax(h, len(p.Rows))
@@ -646,14 +654,18 @@ func writePreview(name, mix string, planes []go3270.Bitmap) error {
 				if y >= len(p.Rows) || x >= len(p.Rows[y]) || !strings.ContainsRune("#Xx1*", rune(p.Rows[y][x])) {
 					continue
 				}
-				if pc := int(p.Color) & 7; mix == "O" {
+				if pc := int(p.Color) & 0x0f; mix == "O" {
 					c = pc
 				} else {
-					c ^= pc
+					c ^= pc & 7
 				}
 			}
+			rgb := gocaRGB[c&7]
+			if mix == "O" {
+				rgb = pal.rgb(c)
+			}
 			for d := 0; d < 4; d++ {
-				out.SetRGBA(2*x+d%2, 2*y+d/2, gocaRGB[c])
+				out.SetRGBA(2*x+d%2, 2*y+d/2, rgb)
 			}
 		}
 	}
@@ -681,54 +693,166 @@ func loadImage(path string) (image.Image, error) {
 // bayer is a 4x4 ordered dither's thresholds, 0 to 15.
 var bayer = [4][4]int{{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}}
 
-// dither scales img to w x h (keeping its shape) and dithers each of red,
-// green and blue to on or off. For mix X that is three planes (blue, red,
-// green) the terminal exclusive-ors into 8 colors; for mix O, a bitmap
-// for each of the 7 colors, each pel in one of them at most, so that no
-// exclusive or is needed.
-func dither(img image.Image, w, h int, mix string) []go3270.Bitmap {
+// fit is w x h made img's shape.
+func fit(img image.Image, w, h int) (int, int) {
 	b := img.Bounds()
 	if b.Dx()*h > b.Dy()*w {
-		h = imax(w*b.Dy()/b.Dx(), 1)
-	} else {
-		w = imax(h*b.Dx()/b.Dy(), 1)
+		return w, imax(w*b.Dy()/b.Dx(), 1)
 	}
-	var planes [8][][]byte // by color index: 1 blue, 2 red, 4 green, their sums the rest
-	for c := range planes {
-		planes[c] = blank(w, h)
-	}
+	return imax(h*b.Dx()/b.Dy(), 1), h
+}
+
+// sample is img's color at x, y of a w x h scaling, 0 to 255 each.
+func sample(img image.Image, x, y, w, h int) (float64, float64, float64) {
+	b := img.Bounds()
+	r, g, bl, _ := img.At(b.Min.X+x*b.Dx()/w, b.Min.Y+y*b.Dy()/h).RGBA()
+	return float64(r >> 8), float64(g >> 8), float64(bl >> 8)
+}
+
+// dither scales img to w x h (keeping its shape) and dithers each of red,
+// green and blue to on or off: three planes (blue, red, green) the
+// terminal exclusive-ors into 8 colors.
+func dither(img image.Image, w, h int) []go3270.Bitmap {
+	w, h = fit(img, w, h)
+	planes := [3][][]byte{blank(w, h), blank(w, h), blank(w, h)} // blue, red, green
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			r, g, bl, _ := img.At(b.Min.X+x*b.Dx()/w, b.Min.Y+y*b.Dy()/h).RGBA()
-			t := uint32(bayer[y%4][x%4]*4096 + 2048)
-			c := 0
-			if bl > t {
-				c |= 1
-			}
-			if r > t {
-				c |= 2
-			}
-			if g > t {
-				c |= 4
-			}
-			if mix == "O" {
-				planes[c][y][x] = '#'
-				continue
-			}
-			for _, bit := range []int{1, 2, 4} {
-				if c&bit != 0 {
-					planes[bit][y][x] = '#'
+			r, g, bl := sample(img, x, y, w, h)
+			t := float64(bayer[y%4][x%4]*16 + 8)
+			for i, v := range []float64{bl, r, g} {
+				if v > t {
+					planes[i][y][x] = '#'
 				}
 			}
 		}
 	}
-	if mix != "O" {
-		return []go3270.Bitmap{{Color: go3270.Blue, Rows: strs(planes[1])}, {Color: go3270.Red, Rows: strs(planes[2])},
-			{Color: go3270.Green, Rows: strs(planes[4])}}
+	return []go3270.Bitmap{{Color: go3270.Blue, Rows: strs(planes[0])}, {Color: go3270.Red, Rows: strs(planes[1])},
+		{Color: go3270.Green, Rows: strs(planes[2])}}
+}
+
+// palette is the graphics colors a terminal has: by index, 0 the
+// background (not drawn), its RGB.
+type palette struct {
+	colors map[int]color.RGBA
+	from   string
+}
+
+func (p palette) rgb(i int) color.RGBA {
+	if c, ok := p.colors[i]; ok {
+		return c
+	}
+	return color.RGBA{0, 0, 0, 255}
+}
+
+func (p palette) String() string {
+	var l []string
+	for i := 0; i < 16; i++ {
+		if c, ok := p.colors[i]; ok {
+			l = append(l, fmt.Sprintf("%d=%02x%02x%02x", i, c.R, c.G, c.B))
+		}
+	}
+	return strings.Join(l, " ")
+}
+
+// palette is the terminal's colors: from its Graphic Color query reply
+// (0xB4) if it sent one, else the 8 base colors.
+func (s *sess) palette() palette {
+	if p, ok := graphicColors(s.dev.QueryReply(0xb4)); ok {
+		return p
+	}
+	return s.basePalette()
+}
+
+func (s *sess) basePalette() palette {
+	p := palette{colors: map[int]color.RGBA{}, from: "the 8 base colors"}
+	for i, c := range gocaRGB {
+		p.colors[i] = c
+	}
+	return p
+}
+
+// graphicColors reads a Graphic Color query reply, from the QCODE on:
+// QCODE, flags, the length of a color value (n), a byte, 6 more, then an
+// entry a color: its index (2 bytes) and n bytes of value, the first
+// three red, blue, green.  (IBM Personal Communications sends 16: the
+// 3270 graphics colors.)
+func graphicColors(r []byte) (palette, bool) {
+	if len(r) < 10 || r[0] != 0xb4 || r[2] < 3 {
+		return palette{}, false
+	}
+	n := int(r[2])
+	p := palette{colors: map[int]color.RGBA{}, from: "the terminal's Graphic Color reply"}
+	for e := r[10:]; len(e) >= 2+n; e = e[2+n:] {
+		i := int(e[0])<<8 | int(e[1])
+		if i < 16 {
+			p.colors[i] = color.RGBA{e[2], e[4], e[3], 255}
+		}
+	}
+	// 0 is the background; 8 is black too
+	if len(p.colors) < 8 {
+		return palette{}, false
+	}
+	p.colors[0] = color.RGBA{0, 0, 0, 255}
+	return p, true
+}
+
+// quantize scales img to w x h (keeping its shape) and diffuses it
+// (Floyd-Steinberg) to the palette: a bitmap a color, each pel in one at
+// most (black ones in none: the background), for overpaint.
+func quantize(img image.Image, w, h int, pal palette) []go3270.Bitmap {
+	w, h = fit(img, w, h)
+	type rgb [3]float64
+	cur, next := make([]rgb, w+2), make([]rgb, w+2)
+	idx := make([]int, 0, 16)
+	for i := range pal.colors {
+		idx = append(idx, i)
+	}
+	sort.Ints(idx)
+	bitmaps := map[int][][]byte{}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b := sample(img, x, y, w, h)
+			cur[x+1][0] += r
+			cur[x+1][1] += g
+			cur[x+1][2] += b
+		}
+		for x := 0; x < w; x++ {
+			want := cur[x+1]
+			best, bestD := 0, math.MaxFloat64
+			for _, i := range idx {
+				c := pal.colors[i]
+				dr, dg, db := want[0]-float64(c.R), want[1]-float64(c.G), want[2]-float64(c.B)
+				// weighted for the eye: green counts most
+				if d := 2*dr*dr + 4*dg*dg + 3*db*db; d < bestD {
+					best, bestD = i, d
+				}
+			}
+			c := pal.colors[best]
+			e := rgb{want[0] - float64(c.R), want[1] - float64(c.G), want[2] - float64(c.B)}
+			for k := 0; k < 3; k++ {
+				cur[x+2][k] += e[k] * 7 / 16
+				next[x][k] += e[k] * 3 / 16
+				next[x+1][k] += e[k] * 5 / 16
+				next[x+2][k] += e[k] * 1 / 16
+			}
+			if c == (color.RGBA{0, 0, 0, 255}) {
+				continue // black: the background
+			}
+			if bitmaps[best] == nil {
+				bitmaps[best] = blank(w, h)
+			}
+			bitmaps[best][y][x] = '#'
+		}
+		cur, next = next, make([]rgb, w+2)
 	}
 	var out []go3270.Bitmap
-	for c := 1; c <= 7; c++ {
-		out = append(out, go3270.Bitmap{Color: go3270.Color(0xf0 + c), Rows: strs(planes[c])})
+	for _, i := range idx {
+		if b := bitmaps[i]; b != nil {
+			out = append(out, go3270.Bitmap{Color: go3270.Color(0xf0 + i), Rows: strs(b)})
+		}
+	}
+	if len(out) == 0 { // all black: one empty bitmap, the size kept
+		out = append(out, go3270.Bitmap{Color: go3270.White, Rows: strs(blank(w, h))})
 	}
 	return out
 }
