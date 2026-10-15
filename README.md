@@ -130,6 +130,10 @@ The origin, position, size, mix, Erase/Reset, and whether the graphics come
 before or after the screen are all settings on the menu. It also sends
 structured fields typed in hex.
 
+With `-preview DIR`, each picture is also written to DIR as a PNG of what
+the terminal should show, for comparison with what it does show. The
+image test reports the file's size and format as decoded.
+
 Every record each way goes to the log, with the graphics orders and the
 terminal's inbound structured fields decoded. A trace from an emulator
 that draws nothing is the place to start.

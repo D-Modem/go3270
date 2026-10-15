@@ -17,13 +17,15 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,7 @@ var (
 	imageFile = flag.String("image", "", "a PNG, JPEG or GIF for the image test")
 	logFile   = flag.String("log", "", "the trace's file (default: stderr)")
 	verbose   = flag.Bool("v", false, "hex dump every record (not only graphics and replies)")
+	preview   = flag.String("preview", "", "a directory to write each picture sent to, as a PNG: what it should look like")
 )
 
 var logger = log.New(os.Stderr, "", log.Ltime|log.Lmicroseconds)
@@ -93,6 +96,7 @@ type sess struct {
 	msg      string
 	lastTest string
 	hex      string // the hex field, kept
+	shots    int    // pictures previewed
 }
 
 func session(c *traceConn) {
@@ -279,7 +283,11 @@ func (s *sess) picture(test string) error {
 			s.msg = err.Error()
 			return nil
 		}
-		planes, what = dither(img, w, h), fmt.Sprintf("%s, %dx%d, dithered to 8 colors", *imageFile, w, h)
+		planes = dither(img, w, h)
+		what = fmt.Sprintf("%s: %s, drawn %dx%d", filepath.Base(*imageFile), describe(*imageFile, img),
+			len(planes[0].Rows[0]), len(planes[0].Rows))
+		logger.Printf("#%d image %s: %s, drawn %dx%d", s.c.id, *imageFile, describe(*imageFile, img),
+			len(planes[0].Rows[0]), len(planes[0].Rows))
 	}
 	x, y := s.position(s.set.row, s.set.col)
 	return s.show(fmt.Sprintf("Test %s: %s", test, what), x, y, planes)
@@ -322,6 +330,15 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 	if err != nil {
 		s.msg = err.Error()
 		return nil
+	}
+	if *preview != "" {
+		s.shots++
+		name := filepath.Join(*preview, fmt.Sprintf("gfxtest-%d-%d.png", s.c.id, s.shots))
+		if err := writePreview(name, s.set.mix, planes); err != nil {
+			logger.Printf("#%d preview: %v", s.c.id, err)
+		} else {
+			logger.Printf("#%d preview of the picture: %s", s.c.id, name)
+		}
 	}
 	scr := go3270.Screen{
 		text(0, 1, trunc(caption, s.cols-2), go3270.Turquoise),
@@ -560,6 +577,66 @@ func barsEach(w, h int) []go3270.Bitmap {
 		out = append(out, go3270.Bitmap{Color: barColors[c-1], Rows: strs(r)})
 	}
 	return out
+}
+
+// describe is what the image file decoded as: its size and format, and
+// how long the file is (to tell one file from another).
+func describe(path string, img image.Image) string {
+	format, size := "?", int64(0)
+	if f, err := os.Open(path); err == nil {
+		_, format, _ = image.DecodeConfig(f)
+		if fi, err := f.Stat(); err == nil {
+			size = fi.Size()
+		}
+		f.Close()
+	}
+	b := img.Bounds()
+	return fmt.Sprintf("%dx%d %s (%s, %d bytes)", b.Dx(), b.Dy(), format, strings.TrimPrefix(fmt.Sprintf("%T", img), "*image."), size)
+}
+
+// gocaRGB is the 3270 graphics colors 0 to 7, as a preview shows them.
+var gocaRGB = []color.RGBA{{0, 0, 0, 255}, {0, 0, 255, 255}, {255, 0, 0, 255}, {255, 0, 255, 255},
+	{0, 255, 0, 255}, {0, 255, 255, 255}, {255, 255, 0, 255}, {255, 255, 255, 255}}
+
+// writePreview draws the planes as the terminal should (each pel's
+// colors exclusive-or'd, or the last on top for mix O) to a PNG, each pel
+// 2x2.
+func writePreview(name, mix string, planes []go3270.Bitmap) error {
+	w, h := 0, 0
+	for _, p := range planes {
+		h = imax(h, len(p.Rows))
+		for _, r := range p.Rows {
+			w = imax(w, len(r))
+		}
+	}
+	out := image.NewRGBA(image.Rect(0, 0, 2*w, 2*h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			c := 0
+			for _, p := range planes {
+				if y >= len(p.Rows) || x >= len(p.Rows[y]) || !strings.ContainsRune("#Xx1*", rune(p.Rows[y][x])) {
+					continue
+				}
+				if pc := int(p.Color) & 7; mix == "O" {
+					c = pc
+				} else {
+					c ^= pc
+				}
+			}
+			for d := 0; d < 4; d++ {
+				out.SetRGBA(2*x+d%2, 2*y+d/2, gocaRGB[c])
+			}
+		}
+	}
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	if err := png.Encode(f, out); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func loadImage(path string) (image.Image, error) {
