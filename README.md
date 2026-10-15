@@ -113,6 +113,27 @@ HostExplorer and Quick3270 do. The formats are from
 [GA23-0059-07][ga23-07] (5.13, 5.38, 6.12, 6.51) and Greg Price's
 [3270 Graphics][grfx].
 
+`cmd/gfxtest` is a TN3270 server for trying the graphics on an emulator:
+
+    go run ./cmd/gfxtest -addr :3270 -image photo.png -log gfxtest.log
+
+It shows what the terminal reported (its size, cell size, GE, the Segment
+reply, programmed symbols, every query reply in hex). It draws test
+pictures as Object Pictures:
+
+ * a one-plane test pattern;
+ * colour bars as three XOR planes, or as seven bitmaps;
+ * corner markers, to check the origin;
+ * the `-image` file, dithered to 8 colours.
+
+The origin, position, size, mix, Erase/Reset, and whether the graphics come
+before or after the screen are all settings on the menu. It also sends
+structured fields typed in hex.
+
+Every record each way goes to the log, with the graphics orders and the
+terminal's inbound structured fields decoded. A trace from an emulator
+that draws nothing is the place to start.
+
  * IND$FILE file transfer, the host's side, in DFT mode: `ParseIndFile()`
    reads the `IND$FILE GET|PUT name options` command an emulator types,
    `SendFileDFT()` and `ReceiveFileDFT()` move the file, `DFTMessage()`
