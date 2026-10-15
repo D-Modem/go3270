@@ -64,8 +64,9 @@ type DevInfo interface {
 	SymbolSets() *SymbolSets
 
 	// SupportsVectorGraphics reports whether the client answered the query
-	// with the Segment query reply (0xB0), which means it takes graphics
-	// segments: vector graphics in Object Picture structured fields.
+	// with the Segment query reply (0xB0), or lists it in its Summary
+	// reply, which means it takes graphics segments: vector graphics in
+	// Object Picture structured fields.
 	SupportsVectorGraphics() bool
 
 	// Private version of AltDimensions() so callers can't fake us out; only

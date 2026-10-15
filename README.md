@@ -131,7 +131,11 @@ before or after the screen are all settings on the menu. It also sends
 structured fields typed in hex.
 
 With `-preview DIR`, each picture is also written to DIR as a PNG of what
-the terminal should show, for comparison with what it does show. The
+the terminal should show, for comparison with what it does show. With mix
+O the image goes as a bitmap per colour, overpainted, with no exclusive or.
+Test 9 sends a Query List for any replies the Summary lists but the
+terminal didn't send (PCOMM lists its graphics replies but doesn't send
+them for a plain Query). The
 image test reports the file's size and format as decoded.
 
 Every record each way goes to the log, with the graphics orders and the

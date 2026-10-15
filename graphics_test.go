@@ -217,3 +217,17 @@ func TestDeviceInfoReplies(t *testing.T) {
 	srv.Close()
 	cli.Close()
 }
+
+// TestVectorBySummary: a client that lists the Segment reply in its
+// Summary without sending it (IBM Personal Communications) takes vector
+// graphics; one that lists neither does not.
+func TestVectorBySummary(t *testing.T) {
+	pcomm := &deviceInfo{replies: map[byte][]byte{0x80: {0x80, 0x80, 0x81, 0x85, 0xa6, 0xa8, 0xb0, 0xb1}}}
+	if !pcomm.SupportsVectorGraphics() {
+		t.Error("Summary lists B0: no vector graphics")
+	}
+	x3270 := &deviceInfo{replies: map[byte][]byte{0x80: {0x80, 0x80, 0x81, 0x85, 0xa6}}}
+	if x3270.SupportsVectorGraphics() || (&deviceInfo{}).SupportsVectorGraphics() {
+		t.Error("vector graphics without B0")
+	}
+}

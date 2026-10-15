@@ -168,8 +168,21 @@ func (d *deviceInfo) CellSize() (int, int) { return d.cellW, d.cellH }
 func (d *deviceInfo) SymbolSets() *SymbolSets { return d.symbols }
 
 func (d *deviceInfo) SupportsVectorGraphics() bool {
-	_, ok := d.replies[0xb0]
-	return ok
+	if _, ok := d.replies[0xb0]; ok {
+		return true
+	}
+	// IBM Personal Communications lists the graphics replies in its
+	// Summary but does not send them for a Query
+	return bytes.IndexByte(d.summary(), 0xb0) >= 0
+}
+
+// summary is the QCODEs the Summary query reply lists: the replies the
+// client says it has.
+func (d *deviceInfo) summary() []byte {
+	if r := d.replies[0x80]; len(r) > 1 {
+		return r[1:]
+	}
+	return nil
 }
 
 // telnetEscape doubles every 0xFF (IAC) in b.

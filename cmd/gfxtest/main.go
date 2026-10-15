@@ -166,11 +166,11 @@ func (s *sess) menu() error {
 		text(0, 1, "gfxtest: 3270 vector bitmaps", go3270.Turquoise),
 		text(1, 1, fmt.Sprintf("Terminal %s  %dx%d  cell %dx%d pels  GE %v", d.TerminalType(), s.cols, s.rows,
 			s.cellW, s.cellH, d.SupportsGE()), go3270.White),
-		text(2, 1, fmt.Sprintf("Vector graphics (Segment reply B0): %v   Programmed symbols: %s",
-			d.SupportsVectorGraphics(), psets), go3270.White),
+		text(2, 1, trunc(fmt.Sprintf("Vector graphics (B0, or in the Summary): %v   Programmed symbols: %s",
+			d.SupportsVectorGraphics(), psets), s.cols-2), go3270.White),
 		text(3, 1, "Query replies: "+trunc(qcodes(d), s.cols-17), go3270.Blue),
 		text(5, 1, "1 Test pattern, one plane    2 Color bars, 3 planes    3 Color bars, 7 bitmaps", go3270.Green),
-		text(6, 1, "4 Corner markers (origin)    5 Image file", go3270.Green),
+		text(6, 1, "4 Corner markers (origin)    5 Image file    9 Ask for the replies not sent", go3270.Green),
 		text(7, 1, "6 Erase/Reset (clears graphics)   7 Send the hex below   8 Query replies, hex", go3270.Green),
 		text(9, 1, "Origin", go3270.Turquoise), text(9, 26, "C middle, y up; B bottom left; T top left, y down", go3270.Blue),
 		text(10, 1, "At row, col", go3270.Turquoise), text(10, 30, "the picture's top left, in character cells", go3270.Blue),
@@ -244,6 +244,8 @@ func (s *sess) menu() error {
 		return s.sendHex(s.hex)
 	case "8":
 		return s.replies()
+	case "9":
+		return s.queryList()
 	case "":
 	default:
 		s.msg = "No such test: " + choice
@@ -283,7 +285,7 @@ func (s *sess) picture(test string) error {
 			s.msg = err.Error()
 			return nil
 		}
-		planes = dither(img, w, h)
+		planes = dither(img, w, h, s.set.mix)
 		what = fmt.Sprintf("%s: %s, drawn %dx%d", filepath.Base(*imageFile), describe(*imageFile, img),
 			len(planes[0].Rows[0]), len(planes[0].Rows))
 		logger.Printf("#%d image %s: %s, drawn %dx%d", s.c.id, *imageFile, describe(*imageFile, img),
@@ -304,8 +306,12 @@ func (s *sess) sizePels() (int, int) {
 		w, h = maxW, maxH
 	}
 	w, h = imin(w, maxW), imin(h, maxH)
-	// three planes in one segment: under 64K
-	for 3*((w+7)/8)*h > 60000 {
+	// the planes in one segment: under 64K (7 bitmaps for an image overpainted)
+	n := 3
+	if s.set.mix == "O" {
+		n = 7
+	}
+	for n*((w+7)/8)*h > 60000 {
 		w, h = w*9/10, h*9/10
 	}
 	return imax(w, 8), imax(h, 8)
@@ -454,6 +460,29 @@ func (s *sess) sendHex(text string) error {
 		return err
 	}
 	s.msg = fmt.Sprintf("Sent %d structured fields: see the log for what came back", len(sfs))
+	return nil
+}
+
+// queryList asks for the replies the Summary lists that did not come
+// (Read Partition, Query List: 01 FF 03 00 and the QCODEs); the answer is
+// in the log.
+func (s *sess) queryList() error {
+	sum := s.dev.QueryReply(0x80)
+	var missing []byte
+	for _, q := range sum[imin(1, len(sum)):] {
+		if s.dev.QueryReply(q) == nil && q != 0x80 {
+			missing = append(missing, q)
+		}
+	}
+	if len(missing) == 0 {
+		s.msg = "Every reply the Summary lists came"
+		return nil
+	}
+	s.c.mark("Query List")
+	if err := go3270.WriteStructuredFields(s.c, append([]byte{0x01, 0xff, 0x03, 0x00}, missing...)); err != nil {
+		return err
+	}
+	s.msg = fmt.Sprintf("Query List sent for % X: the replies are in the log", missing)
 	return nil
 }
 
@@ -653,32 +682,55 @@ func loadImage(path string) (image.Image, error) {
 var bayer = [4][4]int{{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}}
 
 // dither scales img to w x h (keeping its shape) and dithers each of red,
-// green and blue to on or off: the three planes.
-func dither(img image.Image, w, h int) []go3270.Bitmap {
+// green and blue to on or off. For mix X that is three planes (blue, red,
+// green) the terminal exclusive-ors into 8 colors; for mix O, a bitmap
+// for each of the 7 colors, each pel in one of them at most, so that no
+// exclusive or is needed.
+func dither(img image.Image, w, h int, mix string) []go3270.Bitmap {
 	b := img.Bounds()
 	if b.Dx()*h > b.Dy()*w {
 		h = imax(w*b.Dy()/b.Dx(), 1)
 	} else {
 		w = imax(h*b.Dx()/b.Dy(), 1)
 	}
-	planes := [3][][]byte{blank(w, h), blank(w, h), blank(w, h)} // blue, red, green
+	var planes [8][][]byte // by color index: 1 blue, 2 red, 4 green, their sums the rest
+	for c := range planes {
+		planes[c] = blank(w, h)
+	}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			r, g, bl, _ := img.At(b.Min.X+x*b.Dx()/w, b.Min.Y+y*b.Dy()/h).RGBA()
 			t := uint32(bayer[y%4][x%4]*4096 + 2048)
+			c := 0
 			if bl > t {
-				planes[0][y][x] = '#'
+				c |= 1
 			}
 			if r > t {
-				planes[1][y][x] = '#'
+				c |= 2
 			}
 			if g > t {
-				planes[2][y][x] = '#'
+				c |= 4
+			}
+			if mix == "O" {
+				planes[c][y][x] = '#'
+				continue
+			}
+			for _, bit := range []int{1, 2, 4} {
+				if c&bit != 0 {
+					planes[bit][y][x] = '#'
+				}
 			}
 		}
 	}
-	return []go3270.Bitmap{{Color: go3270.Blue, Rows: strs(planes[0])}, {Color: go3270.Red, Rows: strs(planes[1])},
-		{Color: go3270.Green, Rows: strs(planes[2])}}
+	if mix != "O" {
+		return []go3270.Bitmap{{Color: go3270.Blue, Rows: strs(planes[1])}, {Color: go3270.Red, Rows: strs(planes[2])},
+			{Color: go3270.Green, Rows: strs(planes[4])}}
+	}
+	var out []go3270.Bitmap
+	for c := 1; c <= 7; c++ {
+		out = append(out, go3270.Bitmap{Color: go3270.Color(0xf0 + c), Rows: strs(planes[c])})
+	}
+	return out
 }
 
 // --- names
@@ -759,6 +811,16 @@ func (c *traceConn) Read(p []byte) (int, error) {
 		c.mu.Lock()
 		c.in = append(c.in, p[:n]...)
 		var done [][]byte
+		var telnet []string
+		for {
+			// telnet commands ahead of a record are not part of it
+			cmd := telnetCommand(c.in)
+			if cmd == 0 {
+				break
+			}
+			telnet = append(telnet, hex.EncodeToString(c.in[:cmd]))
+			c.in = c.in[cmd:]
+		}
 		for {
 			i := eor(c.in)
 			if i < 0 {
@@ -768,11 +830,37 @@ func (c *traceConn) Read(p []byte) (int, error) {
 			c.in = c.in[i+2:]
 		}
 		c.mu.Unlock()
+		for _, t := range telnet {
+			logger.Printf("#%d <<< telnet %s", c.id, t)
+		}
 		for _, rec := range done {
 			logger.Printf("#%d <<< %s", c.id, describeIn(rec))
 		}
 	}
 	return n, err
+}
+
+// telnetCommand is how long the telnet command b begins with is: IAC and
+// a command, an option's (WILL, WONT, DO, DONT), or a subnegotiation to
+// IAC SE; 0 if b does not begin with a whole one (an escaped 0xFF is data,
+// IAC EOR ends a record).
+func telnetCommand(b []byte) int {
+	if len(b) < 2 || b[0] != 0xff || b[1] == 0xff || b[1] == 0xef {
+		return 0
+	}
+	switch {
+	case b[1] >= 0xfb: // WILL, WONT, DO, DONT
+		if len(b) < 3 {
+			return 0
+		}
+		return 3
+	case b[1] == 0xfa: // SB ... IAC SE
+		if i := bytes.Index(b, []byte{0xff, 0xf0}); i > 0 {
+			return i + 2
+		}
+		return 0
+	}
+	return 2
 }
 
 // eor is where IAC EOR is in b (not an escaped IAC's), -1 if not.
