@@ -346,8 +346,8 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 	}
 	scr := go3270.Screen{
 		text(0, 1, trunc(caption, s.cols-2), go3270.Turquoise),
-		text(1, 1, fmt.Sprintf("at %d,%d (origin %s, mix %s, graphics %s the screen), %s", x, y, s.set.origin,
-			s.set.mix, map[string]string{"A": "after", "B": "before"}[s.set.order], size(sfs)), go3270.Blue),
+		text(1, 1, trunc(fmt.Sprintf("at %d,%d (origin %s, mix %s, graphics %s the screen), %s", x, y, s.set.origin,
+			s.set.mix, map[string]string{"A": "after", "B": "before"}[s.set.order], size(sfs)), s.cols-2), go3270.Blue),
 		text(s.rows-1, 1, "Enter=back  PF5=send the picture again  PF6=Erase/Reset", go3270.Blue),
 	}
 	scr = append(scr, input(s.rows-2, 1, 1, "x")...)
@@ -418,12 +418,16 @@ func (s *sess) corners() error {
 		names = append(names, fmt.Sprintf("%s %d,%d", m.name, x, y))
 	}
 	scr := go3270.Screen{
-		text(2, 1, "Test 4: a cell-sized square in each corner and the middle; are they there?", go3270.Turquoise),
-		text(3, 1, "origin "+s.set.origin+": "+trunc(strings.Join(names[:3], "; "), s.cols-12), go3270.Blue),
-		text(4, 1, trunc(strings.Join(names[3:], "; "), s.cols-2), go3270.Blue),
+		// away from the squares: a character over graphics clears them
+		// in its cell (PCOMM), and so does the cursor
+		text(6, 1, "Test 4: a cell-sized square in each corner and the middle; are they there?", go3270.Turquoise),
+		text(7, 1, "origin "+s.set.origin+": "+trunc(strings.Join(names[:3], "; "), s.cols-12), go3270.Blue),
+		text(8, 1, trunc(strings.Join(names[3:], "; "), s.cols-2), go3270.Blue),
+		text(9, 1, "(text clears graphics under it: keep row,col off rows 6-9 and the last two)", go3270.Blue),
 		text(s.rows-2, 1, "Enter=back", go3270.Blue),
 	}
 	o := s.opts()
+	o.CursorRow, o.CursorCol = s.rows-2, 12
 	o.PostSendCallback = func(any) error {
 		s.c.mark("Object Pictures: corners")
 		return go3270.WriteStructuredFields(s.c, sfs...)
