@@ -114,6 +114,9 @@ This fork keeps every query reply the client sends during
    over 64K into several segments, and takes the mix: `MixOverpaint` for
    an image as a bitmap a colour, which is what works on PCOMM (its
    exclusive or does not combine blue with the other colours).
+   `GraphicColors()` is the terminal's graphics palette (its Graphic Color
+   reply, or the 8 base colours), and `DitherBitmaps()` turns an image
+   into a bitmap per colour of it, error-diffused, for `MixOverpaint`.
 
 The x3270 family supports none of these; IBM Personal Communications,
 HostExplorer and Quick3270 do. The formats are from

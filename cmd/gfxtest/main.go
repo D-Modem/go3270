@@ -23,11 +23,9 @@ import (
 	"image/png"
 	"io"
 	"log"
-	"math"
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -735,7 +733,7 @@ func dither(img image.Image, w, h int) []go3270.Bitmap {
 // palette is the graphics colors a terminal has: by index, 0 the
 // background (not drawn), its RGB.
 type palette struct {
-	colors map[int]color.RGBA
+	colors go3270.Palette
 	from   string
 }
 
@@ -756,103 +754,28 @@ func (p palette) String() string {
 	return strings.Join(l, " ")
 }
 
-// palette is the terminal's colors: from its Graphic Color query reply
-// (0xB4) if it sent one, else the 8 base colors.
+// palette is the terminal's colors (go3270.GraphicColors): from its
+// Graphic Color query reply (0xB4) if it sent one, else the 8 base colors.
 func (s *sess) palette() palette {
-	if p, ok := graphicColors(s.dev.QueryReply(0xb4)); ok {
-		return p
+	from := "the 8 base colors"
+	if s.dev.QueryReply(0xb4) != nil {
+		from = "the terminal's Graphic Color reply"
 	}
-	return s.basePalette()
+	return palette{colors: go3270.GraphicColors(s.dev), from: from}
 }
 
-func (s *sess) basePalette() palette {
-	p := palette{colors: map[int]color.RGBA{}, from: "the 8 base colors"}
-	for i, c := range gocaRGB {
-		p.colors[i] = c
-	}
-	return p
-}
-
-// graphicColors reads a Graphic Color query reply, from the QCODE on:
-// QCODE, flags, the length of a color value (n), a byte, 6 more, then an
-// entry a color: its index (2 bytes) and n bytes of value, the first
-// three red, blue, green.  (IBM Personal Communications sends 16: the
-// 3270 graphics colors.)
-func graphicColors(r []byte) (palette, bool) {
-	if len(r) < 10 || r[0] != 0xb4 || r[2] < 3 {
-		return palette{}, false
-	}
-	n := int(r[2])
-	p := palette{colors: map[int]color.RGBA{}, from: "the terminal's Graphic Color reply"}
-	for e := r[10:]; len(e) >= 2+n; e = e[2+n:] {
-		i := int(e[0])<<8 | int(e[1])
-		if i < 16 {
-			p.colors[i] = color.RGBA{e[2], e[4], e[3], 255}
-		}
-	}
-	// 0 is the background; 8 is black too
-	if len(p.colors) < 8 {
-		return palette{}, false
-	}
-	p.colors[0] = color.RGBA{0, 0, 0, 255}
-	return p, true
-}
-
-// quantize scales img to w x h (keeping its shape) and diffuses it
-// (Floyd-Steinberg) to the palette: a bitmap a color, each pel in one at
-// most (black ones in none: the background), for overpaint.
+// quantize scales img to w x h (keeping its shape) and diffuses it to
+// the palette (go3270.DitherBitmaps): a bitmap a color, for overpaint.
 func quantize(img image.Image, w, h int, pal palette) []go3270.Bitmap {
 	w, h = fit(img, w, h)
-	type rgb [3]float64
-	cur, next := make([]rgb, w+2), make([]rgb, w+2)
-	idx := make([]int, 0, 16)
-	for i := range pal.colors {
-		idx = append(idx, i)
-	}
-	sort.Ints(idx)
-	bitmaps := map[int][][]byte{}
+	scaled := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			r, g, b := sample(img, x, y, w, h)
-			cur[x+1][0] += r
-			cur[x+1][1] += g
-			cur[x+1][2] += b
-		}
-		for x := 0; x < w; x++ {
-			want := cur[x+1]
-			best, bestD := 0, math.MaxFloat64
-			for _, i := range idx {
-				c := pal.colors[i]
-				dr, dg, db := want[0]-float64(c.R), want[1]-float64(c.G), want[2]-float64(c.B)
-				// weighted for the eye: green counts most
-				if d := 2*dr*dr + 4*dg*dg + 3*db*db; d < bestD {
-					best, bestD = i, d
-				}
-			}
-			c := pal.colors[best]
-			e := rgb{want[0] - float64(c.R), want[1] - float64(c.G), want[2] - float64(c.B)}
-			for k := 0; k < 3; k++ {
-				cur[x+2][k] += e[k] * 7 / 16
-				next[x][k] += e[k] * 3 / 16
-				next[x+1][k] += e[k] * 5 / 16
-				next[x+2][k] += e[k] * 1 / 16
-			}
-			if c == (color.RGBA{0, 0, 0, 255}) {
-				continue // black: the background
-			}
-			if bitmaps[best] == nil {
-				bitmaps[best] = blank(w, h)
-			}
-			bitmaps[best][y][x] = '#'
-		}
-		cur, next = next, make([]rgb, w+2)
-	}
-	var out []go3270.Bitmap
-	for _, i := range idx {
-		if b := bitmaps[i]; b != nil {
-			out = append(out, go3270.Bitmap{Color: go3270.Color(0xf0 + i), Rows: strs(b)})
+			scaled.SetRGBA(x, y, color.RGBA{uint8(r), uint8(g), uint8(b), 255})
 		}
 	}
+	out := go3270.DitherBitmaps(scaled, pal.colors)
 	if len(out) == 0 { // all black: one empty bitmap, the size kept
 		out = append(out, go3270.Bitmap{Color: go3270.White, Rows: strs(blank(w, h))})
 	}
