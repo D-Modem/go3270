@@ -399,3 +399,20 @@ func TestImagePictures(t *testing.T) {
 		}
 	}
 }
+
+// TestAttributeCharSet: an AttributeOnly field's character set is a Set
+// Attribute (0x43), and DefaultCharSet sets it back; none otherwise.
+func TestAttributeCharSet(t *testing.T) {
+	for _, c := range []struct {
+		f    Field
+		want []byte
+	}{
+		{Field{AttributeOnly: true, Color: Red, CharSet: 0xc2}, []byte{0x28, 0x41, 0, 0x28, 0x42, 0xf2, 0x28, 0x43, 0xc2}},
+		{Field{AttributeOnly: true, DefaultCharSet: true}, []byte{0x28, 0x41, 0, 0x28, 0x42, 0, 0x28, 0x43, 0}},
+		{Field{AttributeOnly: true, Color: Blue}, []byte{0x28, 0x41, 0, 0x28, 0x42, 0xf1}},
+	} {
+		if got := buildField(c.f); !bytes.Equal(got, c.want) {
+			t.Errorf("%+v: % x, want % x", c.f, got, c.want)
+		}
+	}
+}

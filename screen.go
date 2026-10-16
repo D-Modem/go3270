@@ -87,8 +87,13 @@ type Field struct {
 	// CharSet is the local ID of the character set the field is shown in:
 	// 0 for the default; a programmed symbol set's LCID (see LoadPS). It is
 	// sent as an extended field attribute (SFE type 0x43), so it ends with
-	// the field.
+	// the field; with AttributeOnly, as a Set Attribute (SA type 0x43),
+	// which lasts until another changes it (see DefaultCharSet).
 	CharSet byte
+
+	// DefaultCharSet, with AttributeOnly, sets the character set back to
+	// the default (SA type 0x43, 0) for the characters after it.
+	DefaultCharSet bool
 
 	// Raw, if not nil, is sent as the field's content as it is, instead of
 	// Content encoded in the code page: the code points of programmed
@@ -410,6 +415,11 @@ func buildField(f Field) []byte {
 		buf.WriteByte(0x28) // sa - "set attribute"
 		buf.WriteByte(0x42)
 		buf.WriteByte(byte(f.Color))
+		if f.CharSet != 0 || f.DefaultCharSet {
+			buf.WriteByte(0x28) // sa - "set attribute"
+			buf.WriteByte(0x43)
+			buf.WriteByte(f.CharSet)
+		}
 		return buf.Bytes()
 	}
 
