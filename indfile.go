@@ -40,9 +40,10 @@ type IndFile struct {
 }
 
 // ParseIndFile parses "IND$FILE GET|PUT name [(] options" (TSO puts the
-// options after the name; VM/CMS after a "("), case aside.
+// options after the name; VM/CMS after a "("), case aside.  A "(" within
+// a name (a TSO member, 'USER.DATA(MEM)') stays in it.
 func ParseIndFile(s string) (*IndFile, bool) {
-	f := strings.Fields(strings.ReplaceAll(s, "(", " ( "))
+	f := strings.Fields(s)
 	if len(f) < 3 || !strings.EqualFold(f[0], "IND$FILE") {
 		return nil, false
 	}
@@ -54,31 +55,49 @@ func ParseIndFile(s string) (*IndFile, bool) {
 	default:
 		return nil, false
 	}
+	var name, opts []string
 	i := 2
-	var name []string
-	for ; i < len(f) && f[i] != "("; i++ {
-		u := strings.ToUpper(f[i])
-		if len(name) > 0 && isIndOption(u) {
+	for ; i < len(f); i++ {
+		tok := f[i]
+		if strings.HasPrefix(tok, "(") {
+			opts = append(opts, tok[1:]) // CMS: the options from here
+			i++
+			break
+		}
+		if len(name) > 0 && isIndOption(strings.ToUpper(tok)) {
 			break // TSO: options after the name
 		}
-		name = append(name, f[i])
+		// CMS written close up, "fm(ASCII": the "(" begins options when
+		// one follows it (a TSO member, "DATA(MEM)", does not)
+		if j := strings.IndexByte(tok, '('); j > 0 && !strings.HasPrefix(tok, "'") &&
+			isIndOption(strings.ToUpper(strings.TrimSuffix(tok[j+1:], ")"))) {
+			name = append(name, tok[:j])
+			opts = append(opts, tok[j+1:])
+			i++
+			break
+		}
+		name = append(name, tok)
 	}
 	if len(name) == 0 {
 		return nil, false
 	}
 	ind.Name = strings.Join(name, " ")
-	for ; i < len(f); i++ {
-		if f[i] == "(" || f[i] == ")" {
+	for _, o := range append(opts, f[i:]...) {
+		// "(ASCII", "CRLF)": the CMS parentheses off; "RECFM(V)" kept whole
+		u := strings.ToUpper(strings.TrimPrefix(o, "("))
+		if !strings.Contains(u, "(") {
+			u = strings.TrimSuffix(u, ")")
+		}
+		if u == "" {
 			continue
 		}
-		u := strings.ToUpper(f[i])
 		ind.Options = append(ind.Options, u)
-		switch {
-		case u == "ASCII":
+		switch u {
+		case "ASCII":
 			ind.ASCII = true
-		case u == "CRLF":
+		case "CRLF":
 			ind.CRLF = true
-		case u == "APPEND":
+		case "APPEND":
 			ind.Append = true
 		}
 	}
@@ -185,7 +204,11 @@ func ReadRecord(conn net.Conn, timeout time.Duration) ([]byte, error) {
 					return nil, err
 				}
 				if x == 0xff {
-					if y, _ := r.ReadByte(); y == 0xf0 {
+					y, err := r.ReadByte()
+					if err != nil {
+						return nil, err
+					}
+					if y == 0xf0 {
 						break
 					}
 				}

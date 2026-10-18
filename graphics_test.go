@@ -458,3 +458,51 @@ func TestLoadPSPlane(t *testing.T) {
 		t.Error("plane 3 taken")
 	}
 }
+
+// TestDeviceInfoSize: with no Usable Area reply the size is the model's
+// (a -4 is 43x80), else 24x80, never 0x0 (IBM-DYNAMIC answering without
+// one).
+func TestDeviceInfoSize(t *testing.T) {
+	for _, c := range []struct {
+		termtype   string
+		reply      []byte // after the Query, IAC EOR added
+		rows, cols int
+	}{
+		{"IBM-3278-4-E", []byte{0x7d}, 43, 80},                        // Enter, not query replies
+		{"IBM-DYNAMIC", []byte{0x88, 0, 5, 0x81, 0x80, 0x80}, 24, 80}, // a Summary alone
+	} {
+		srv, cli := net.Pipe()
+		done := make(chan DevInfo, 1)
+		go func() {
+			d, err := makeDeviceInfo(srv, c.termtype)
+			if err != nil {
+				t.Error(err)
+			}
+			done <- d
+		}()
+		go func() {
+			buf := make([]byte, 64)
+			cli.Read(buf)
+			cli.Read(buf)
+			cli.Write(append(c.reply, 0xff, 0xef))
+			for {
+				if _, err := cli.Read(buf); err != nil {
+					return
+				}
+			}
+		}()
+		select {
+		case d := <-done:
+			if d == nil {
+				break
+			}
+			if r, k := d.AltDimensions(); r != c.rows || k != c.cols {
+				t.Errorf("%s: %dx%d, want %dx%d", c.termtype, r, k, c.rows, c.cols)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: no answer", c.termtype)
+		}
+		srv.Close()
+		cli.Close()
+	}
+}

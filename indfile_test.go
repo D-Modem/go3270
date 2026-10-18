@@ -6,6 +6,7 @@ package go3270
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,7 +24,10 @@ func TestParseIndFile(t *testing.T) {
 		{"IND$FILE PUT ft1 text (ASCII CRLF", true, false, "ft1 text", true, true},
 		{"ind$file get readme.txt", true, true, "readme.txt", false, false},
 		{"IND$FILE GET my file.zip (", true, true, "my file.zip", false, false},
-		{"IND$FILE GET 'USER.DATA(MEM)' ASCII", true, true, "'USER.DATA", true, false},
+		{"IND$FILE GET 'USER.DATA(MEM)' ASCII", true, true, "'USER.DATA(MEM)'", true, false},
+		{"IND$FILE PUT USER.DATA(MEM) ASCII CRLF", true, false, "USER.DATA(MEM)", true, true},
+		{"IND$FILE PUT 'X.LIB(A)' RECFM(V) LRECL(80)", true, false, "'X.LIB(A)'", false, false},
+		{"IND$FILE PUT ft1 text a(ASCII CRLF", true, false, "ft1 text a", true, true},
 		{"IND$FILE DELETE x", false, false, "", false, false},
 		{"IND$FILE PUT", false, false, "", false, false},
 		{"1", false, false, "", false, false},
@@ -37,9 +41,12 @@ func TestParseIndFile(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if f.Get != c.get || (c.name != "'USER.DATA" && f.Name != c.name) || f.ASCII != c.ascii || f.CRLF != c.crlf {
+		if f.Get != c.get || f.Name != c.name || f.ASCII != c.ascii || f.CRLF != c.crlf {
 			t.Errorf("%q: %+v", c.in, f)
 		}
+	}
+	if f, _ := ParseIndFile("IND$FILE PUT 'X.LIB(A)' RECFM(V) LRECL(80) (APPEND)"); strings.Join(f.Options, " ") != "RECFM(V) LRECL(80) APPEND" || !f.Append {
+		t.Errorf("options %q", f.Options)
 	}
 }
 

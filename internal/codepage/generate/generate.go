@@ -167,7 +167,7 @@ func read(input string) (map[int]int, error) {
 
 		codepoint, ebcdic, err := parseUcmLine(line)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("%s: %q: %w", input, line, err)
 		}
 
 		if _, ok := u2e[codepoint]; ok {
@@ -178,7 +178,7 @@ func read(input string) (map[int]int, error) {
 	}
 
 	if err := s.Err(); err != nil {
-		panic(err)
+		return nil, fmt.Errorf("%s: %w", input, err)
 	}
 
 	return u2e, nil

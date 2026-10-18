@@ -384,6 +384,14 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		return nil, err
 	}
 
+	// the size when no Usable Area says: the model's, else 24x80
+	size := func() (int, int) {
+		if rows == 0 || cols == 0 {
+			return 24, 80
+		}
+		return rows, cols
+	}
+
 	// We'll use a timeout in case the client doesn't support/reply to our
 	// structured field query.
 	var aid [1]byte
@@ -394,7 +402,8 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		// Timeout. In this case, we'll assume it's because the client didn't
 		// reply to our query command. In that case, we'll return whatever
 		// we're already assuming.
-		return &deviceInfo{rows: 24, cols: 80, termtype: termtype}, nil
+		rows, cols = size()
+		return &deviceInfo{rows: rows, cols: cols, termtype: termtype}, nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -404,7 +413,8 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		// structured field queries? If we're not getting the kind of reply
 		// we're expecting, we'll return whatever we're already assuming.
 		flushConnection(conn, 50*time.Millisecond)
-		return &deviceInfo{rows: 24, cols: 80, termtype: termtype}, nil
+		rows, cols = size()
+		return &deviceInfo{rows: rows, cols: cols, termtype: termtype}, nil
 	}
 
 	// There are an arbitrary number of query reply structured fields. We
@@ -487,6 +497,7 @@ func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 		codepage = nil
 	}
 
+	rows, cols = size() // IBM-DYNAMIC with no Usable Area too
 	return &deviceInfo{rows: rows, cols: cols, termtype: termtype,
 		codepage: codepage, hasGE: hasGE, replies: replies,
 		cellW: cellW, cellH: cellH, symbols: symbols}, nil
