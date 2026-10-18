@@ -14,6 +14,7 @@ import (
 	"github.com/racingmars/go3270"
 )
 
+// main listens on port 3270 and handles each connection in its own goroutine.
 func main() {
 	ln, err := net.Listen("tcp", ":3270")
 	if err != nil {

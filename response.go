@@ -63,6 +63,10 @@ const (
 	aidQueryResponse AID = 0x88
 )
 
+// readResponse reads the client's response to a screen: the AID and, unless it
+// is Clear or a PA key, the cursor position and the values of the fields in fm.
+// The screen width comes from dev (80 if nil), and field data is decoded with
+// cp (the default codepage if nil).
 func readResponse(c net.Conn, fm fieldmap, dev DevInfo,
 	cp Codepage) (Response, error) {
 
@@ -103,6 +107,8 @@ func readResponse(c net.Conn, fm fieldmap, dev DevInfo,
 	return r, nil
 }
 
+// readAID reads and discards bytes until it finds a valid AID byte, and returns
+// it.
 func readAID(c net.Conn) (AID, error) {
 	for {
 		b, valid, _, err := telnetRead(c, false)
@@ -121,6 +127,8 @@ func readAID(c net.Conn) (AID, error) {
 	}
 }
 
+// readPosition reads a 2-byte buffer address and returns it, along with the row
+// and column it is on a screen cols wide.
 func readPosition(c net.Conn, cols int) (row, col, addr int, err error) {
 	raw := make([]byte, 2)
 
@@ -144,6 +152,9 @@ func readPosition(c net.Conn, cols int) (row, col, addr int, err error) {
 	return row, col, addr, nil
 }
 
+// readFields reads the modified fields up to the telnet EOR and returns the
+// decoded values of those in fm, by name. Each field begins with an SBA order;
+// fields not in fm are dropped.
 func readFields(c net.Conn, fm fieldmap, cols int,
 	cp Codepage) (map[string]string, error) {
 
@@ -205,6 +216,8 @@ func readFields(c net.Conn, fm fieldmap, cols int,
 	}
 }
 
+// handleField stores value in values under the name fm gives the field at
+// buffer address addr. It returns false if fm has no field there.
 func handleField(addr int, value string, fm fieldmap, values map[string]string) bool {
 	name, ok := fm[addr]
 

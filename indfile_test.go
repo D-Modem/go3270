@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// TestParseIndFile: GET or PUT, the name, and the options after it (TSO) or
+// after "(" (CMS); other commands are refused.
 func TestParseIndFile(t *testing.T) {
 	cases := []struct {
 		in          string
@@ -41,6 +43,8 @@ func TestParseIndFile(t *testing.T) {
 	}
 }
 
+// TestDFTBufferSize: the smaller of the DDM reply's LIMIN and LIMOUT; 0 without
+// the reply.
 func TestDFTBufferSize(t *testing.T) {
 	d := &deviceInfo{replies: map[byte][]byte{0x95: {0x95, 0, 0, 0x40, 0, 0x20, 0, 1, 1, 0}}}
 	if n := DFTBufferSize(d); n != 0x2000 {
@@ -51,6 +55,8 @@ func TestDFTBufferSize(t *testing.T) {
 	}
 }
 
+// TestReadRecord: IAC IAC undone, telnet commands dropped, and nothing past IAC
+// EOR read.
 func TestReadRecord(t *testing.T) {
 	srv, cli := net.Pipe()
 	go func() {

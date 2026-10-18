@@ -26,6 +26,8 @@ var charsetReply = []byte{0x81, 0x85,
 	0x03, 0x80, 0xff, 0x00, 0x00, 0x00, 0x00, // loadable RWS 3
 }
 
+// TestSymbolSets: a Character Sets reply's flags, slot size, formats and sets
+// are parsed; short replies do not panic.
 func TestSymbolSets(t *testing.T) {
 	s := getSymbolSets(charsetReply)
 	if s == nil || !s.GraphicEscape || !s.Loadable || !s.Extended || !s.SizeMatch {
@@ -52,6 +54,8 @@ func TestSymbolSets(t *testing.T) {
 	}
 }
 
+// TestLoadPSFormat1: a format 1 symbol is its left column in 2 bytes, then a
+// byte a row for the other 8 columns.
 func TestLoadPSFormat1(t *testing.T) {
 	sym := Symbol{
 		"#########",
@@ -69,6 +73,8 @@ func TestLoadPSFormat1(t *testing.T) {
 	}
 }
 
+// TestLoadPSFormat3: the extended header gives the cell's size and the rows'
+// bits follow; a 9-wide symbol's rows run on, padded to a byte.
 func TestLoadPSFormat3(t *testing.T) {
 	sym := Symbol{"#.......", "........", "#######."}
 	sf, err := LoadPS{RWS: 2, LCID: 0x42, First: 0x50, Format: 3, Width: 8, Height: 3,
@@ -89,6 +95,8 @@ func TestLoadPSFormat3(t *testing.T) {
 	}
 }
 
+// TestLoadPSErrors: a bad LCID or first code point, too many symbols, format 2,
+// and format 3 without a size are refused.
 func TestLoadPSErrors(t *testing.T) {
 	for _, l := range []LoadPS{
 		{LCID: 0x30, First: 0x41, Format: 1},
@@ -103,6 +111,8 @@ func TestLoadPSErrors(t *testing.T) {
 	}
 }
 
+// TestWriteStructuredFields: WSF, the field's unescaped length, the field with
+// 0xFF doubled, IAC EOR.
 func TestWriteStructuredFields(t *testing.T) {
 	srv, cli := net.Pipe()
 	go func() {
@@ -118,6 +128,8 @@ func TestWriteStructuredFields(t *testing.T) {
 	}
 }
 
+// TestCharSetField: a field's CharSet makes it a Start Field Extended with a
+// character set (0x43) pair.
 func TestCharSetField(t *testing.T) {
 	f := buildField(Field{CharSet: 0x41})
 	want := []byte{0x29, 2, 0xc0, sfAttribute(false, false, false, false, false), 0x43, 0x41}
@@ -126,6 +138,8 @@ func TestCharSetField(t *testing.T) {
 	}
 }
 
+// TestImagePicture: the Object Picture's header, segment length and orders
+// (mix, position, color, the image a row at a time); ragged rows are refused.
 func TestImagePicture(t *testing.T) {
 	sf, err := ImagePicture(-60, 60, Bitmap{Color: Blue, Rows: []string{"#.......#", "........."}})
 	if err != nil {
@@ -177,6 +191,8 @@ func TestShortQueryReply(t *testing.T) {
 	}
 }
 
+// TestDeviceInfoReplies: makeDeviceInfo keeps the query replies and takes the
+// cell size, symbol sets and vector graphics from them.
 func TestDeviceInfoReplies(t *testing.T) {
 	srv, cli := net.Pipe()
 	done := make(chan DevInfo, 1)

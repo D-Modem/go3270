@@ -18,6 +18,8 @@ import (
 // Tool to generate codepage implementation files for go3270 using the
 // Unicode icu-data UCM format files.
 
+// main writes the Go source of the code page named by -n, from the UCM file
+// given by -i, to standard output.
 func main() {
 	cpName := flag.String("n", "", "Code page name (e.g. 037)")
 	cpPath := flag.String("i", "", "Input file path")
@@ -182,6 +184,8 @@ func read(input string) (map[int]int, error) {
 	return u2e, nil
 }
 
+// parseUcmLine returns the Unicode code point and the EBCDIC byte from a UCM
+// CHARMAP line such as `<U0041> \xC1 |0`.
 func parseUcmLine(s string) (int, int, error) {
 	// Regex to match <UXXXX> and \xYY patterns
 	reU := regexp.MustCompile(`U([0-9A-Fa-f]+)`)

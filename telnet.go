@@ -323,6 +323,12 @@ func getTerminalType(conn net.Conn) (string, error) {
 
 var modelRegex = regexp.MustCompile(`^IBM-\d{4}-([2-5])`)
 
+// makeDeviceInfo finds out what the client supports after telnet
+// negotiation: it erases the screen into alternate mode, sends a Read
+// Partition Query (and a Query List for any replies the Summary lists that
+// did not come), and builds the DevInfo from the replies: screen and cell
+// size, code page, graphic escape and symbol sets. A client that sends no
+// query reply within 3 seconds is taken to be 24x80.
 func makeDeviceInfo(conn net.Conn, termtype string) (DevInfo, error) {
 	var rows, cols, cpid int
 	var hasGE bool
@@ -773,22 +779,28 @@ type deviceInfo struct {
 	symbols      *SymbolSets
 }
 
+// AltDimensions returns the rows and columns of the alternate screen.
 func (d *deviceInfo) AltDimensions() (rows, cols int) {
 	return d.rows, d.cols
 }
 
+// TerminalType returns the terminal type the client reported.
 func (d *deviceInfo) TerminalType() string {
 	return d.termtype
 }
 
+// altDimensions is the private AltDimensions; see DevInfo.
 func (d *deviceInfo) altDimensions() (rows, cols int) {
 	return d.rows, d.cols
 }
 
+// Codepage returns the client's code page, or nil if it is unknown.
 func (d *deviceInfo) Codepage() Codepage {
 	return d.codepage
 }
 
+// SupportsGE reports whether the client supports graphic escape to code page
+// 310.
 func (d *deviceInfo) SupportsGE() bool {
 	return d.hasGE
 }

@@ -88,6 +88,7 @@ func (cp *codepage) Encode(s string) []byte {
 	return out
 }
 
+// ID returns the name of this codepage, such as "037" or "bracket".
 func (cp *codepage) ID() string {
 	return cp.id
 }

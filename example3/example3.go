@@ -28,6 +28,7 @@ var refresh = go3270.Screen{
 	screen[3], // Copy the time field that we want to update
 }
 
+// main listens on port 3270 and handles each connection in its own goroutine.
 func main() {
 	ln, err := net.Listen("tcp", ":3270")
 	if err != nil {

@@ -85,6 +85,8 @@ func ParseIndFile(s string) (*IndFile, bool) {
 	return ind, true
 }
 
+// isIndOption reports whether u (upper case) is an IND$FILE option, with or
+// without a parenthesized value: where a TSO name ends.
 func isIndOption(u string) bool {
 	for _, o := range []string{"ASCII", "BINARY", "CRLF", "NOCRLF", "APPEND", "RECFM", "LRECL",
 		"BLKSIZE", "SPACE", "TRACKS", "CYLINDERS", "AVBLOCK"} {
@@ -196,6 +198,7 @@ func ReadRecord(conn net.Conn, timeout time.Duration) ([]byte, error) {
 // the connection.
 type oneByte struct{ c net.Conn }
 
+// Read reads one byte at most into p.
 func (o oneByte) Read(p []byte) (int, error) {
 	if len(p) > 1 {
 		p = p[:1]
@@ -257,6 +260,8 @@ func dftExchange(conn net.Conn, timeout time.Duration, want uint16, fields ...[]
 	return data, nil
 }
 
+// dftOpen sends the Open request open for the file name (FT:DATA, FT:MSG),
+// padded to 7, and waits for its acknowledgment (0x0009).
 func dftOpen(conn net.Conn, timeout time.Duration, open []byte, name string) error {
 	sf := append(append([]byte(nil), open...), []byte(fmt.Sprintf("%-7s", name))...)
 	_, err := dftExchange(conn, timeout, 0x0009, sf)

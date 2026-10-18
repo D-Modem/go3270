@@ -34,6 +34,7 @@ type dbstate struct {
 	users map[string]User
 }
 
+// Connect returns a new, empty in-memory DB.
 func Connect() DB {
 	return &dbstate{
 		users: make(map[string]User),
@@ -43,6 +44,7 @@ func Connect() DB {
 var ErrUserExists = errors.New("username already exists")
 var ErrNotFound = errors.New("record not found")
 
+// GetUser returns the user with the given username, or ErrNotFound.
 func (db *dbstate) GetUser(username string) (User, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
@@ -55,6 +57,8 @@ func (db *dbstate) GetUser(username string) (User, error) {
 	return user, nil
 }
 
+// CreateUser stores a new user, setting its signup date to now, and returns the
+// stored record. It returns ErrUserExists if the username is taken.
 func (db *dbstate) CreateUser(user User) (User, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
@@ -73,6 +77,9 @@ func (db *dbstate) CreateUser(user User) (User, error) {
 	return user, nil
 }
 
+// UpdateUser replaces an existing user's record, keeping its signup date, and
+// its password if user.Password is empty. It returns the stored record, or
+// ErrNotFound.
 func (db *dbstate) UpdateUser(user User) (User, error) {
 	db.lock.Lock()
 	defer db.lock.Unlock()

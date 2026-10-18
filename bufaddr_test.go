@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+// TestEncode: getpos encodes 12-bit buffer addresses, and 14-bit ones on a
+// large screen.
 func TestEncode(t *testing.T) {
 	encoded := getpos(0, 0, 80)
 	if encoded[0] != 0x40 || encoded[1] != 0x40 {
@@ -26,6 +28,7 @@ func TestEncode(t *testing.T) {
 	}
 }
 
+// TestDecode: decodeBufAddr decodes 12-bit and 14-bit buffer addresses.
 func TestDecode(t *testing.T) {
 	decoded := decodeBufAddr([2]byte{0x40, 0x40})
 	if decoded != 0 {

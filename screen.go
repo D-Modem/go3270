@@ -296,6 +296,11 @@ func ShowScreenNoResponse(screen Screen, values map[string]string,
 	return err
 }
 
+// showScreenInternal builds the data stream for screen and sends it: an
+// Erase/Write (Erase/Write Alternate unless the screen is 24x80) and the cursor
+// at crow, ccol if clear is true, else a plain Write that keeps modified data
+// tags. It returns the writable fields' buffer addresses mapped to their names,
+// for reading the response.
 func showScreenInternal(screen Screen, values map[string]string,
 	crow, ccol int, conn net.Conn, clear bool, dev DevInfo,
 	cp Codepage) (fieldmap, error) {

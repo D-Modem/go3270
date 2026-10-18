@@ -171,6 +171,9 @@ type newuserData struct {
 	errmsg   string
 }
 
+// newuser transaction shows the registration screen and creates the user, going
+// to the main menu on success. It accepts a newuserData value in data to
+// pre-fill the screen and show an error message.
 func (sess *session) newuser(conn net.Conn, devinfo go3270.DevInfo, data any) (
 	go3270.Tx, any, error) {
 

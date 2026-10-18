@@ -44,6 +44,8 @@ var normallayout = go3270.Screen{
 	{Row: 11, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"},
 }
 
+// normalscreen transaction shows a default 24x80 screen. PF1 goes back to
+// bigscreen and PF3 exits.
 func normalscreen(conn net.Conn, devinfo go3270.DevInfo, data any) (
 	go3270.Tx, any, error) {
 

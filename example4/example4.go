@@ -30,6 +30,8 @@ type session struct {
 	g *global
 }
 
+// main creates the mock database and the shared state, then listens on port
+// 3270 and handles each connection in its own goroutine.
 func main() {
 	// "Connect" to our database (for this example, it's just a mock in-memory
 	// database).

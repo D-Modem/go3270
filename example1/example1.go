@@ -13,6 +13,8 @@ import (
 	"github.com/racingmars/go3270"
 )
 
+// init is where go3270's debug output can be turned on: uncomment the line (and
+// import os) to log the data streams.
 func init() {
 	// put the go3270 library in debug mode:
 	// go3270.Debug = os.Stderr
@@ -89,6 +91,7 @@ var goodbyeScreen = go3270.Screen{
 	{Row: 2, Col: 0, Content: "Thank you using this application. Goodbye."},
 }
 
+// main listens on port 3270 and handles each connection in its own goroutine.
 func main() {
 	ln, err := net.Listen("tcp", ":3270")
 	if err != nil {

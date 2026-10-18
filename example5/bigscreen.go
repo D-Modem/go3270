@@ -41,6 +41,9 @@ var biglayout = go3270.Screen{
 	{Row: 11, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"},
 }
 
+// bigscreen transaction fills the terminal's full alternate screen size, with
+// an input field on the last row. Enter echoes the input back (passed in data
+// as a string), PF1 goes to normalscreen, and PF3 exits.
 func bigscreen(conn net.Conn, devinfo go3270.DevInfo, data any) (
 	go3270.Tx, any, error) {
 

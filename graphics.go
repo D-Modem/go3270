@@ -146,6 +146,7 @@ func getCellSize(buf []byte) (w, h int) {
 	return int(buf[17]), int(buf[18])
 }
 
+// QueryReply returns a copy of the reply with QCODE qcode; nil if none came.
 func (d *deviceInfo) QueryReply(qcode byte) []byte {
 	r, ok := d.replies[qcode]
 	if !ok {
@@ -154,6 +155,7 @@ func (d *deviceInfo) QueryReply(qcode byte) []byte {
 	return append([]byte(nil), r...)
 }
 
+// QueryCodes lists the QCODEs of the replies kept, ascending.
 func (d *deviceInfo) QueryCodes() []byte {
 	var out []byte
 	for k := range d.replies {
@@ -163,10 +165,14 @@ func (d *deviceInfo) QueryCodes() []byte {
 	return out
 }
 
+// CellSize is the default cell in pels, from the Usable Area reply.
 func (d *deviceInfo) CellSize() (int, int) { return d.cellW, d.cellH }
 
+// SymbolSets is the Character Sets reply, parsed; nil if none came.
 func (d *deviceInfo) SymbolSets() *SymbolSets { return d.symbols }
 
+// SupportsVectorGraphics reports whether the Segment reply (0xB0) came or the
+// Summary lists it.
 func (d *deviceInfo) SupportsVectorGraphics() bool {
 	if _, ok := d.replies[0xb0]; ok {
 		return true
@@ -224,6 +230,8 @@ func WriteStructuredFields(conn net.Conn, fields ...[]byte) error {
 // anything else for one that is off.
 type Symbol []string
 
+// on reports whether the pel at row, col is on ('#', 'X', 'x', '1' or '*'); off
+// past the symbol's edge.
 func (s Symbol) on(row, col int) bool {
 	if row >= len(s) || col >= len(s[row]) {
 		return false
@@ -561,6 +569,7 @@ func ImagePictures(x, y int, o PictureOptions, planes ...Bitmap) ([][]byte, int,
 	return out, first + len(segs), nil
 }
 
+// min2 is the smaller of a and b.
 func min2(a, b int) int {
 	if a < b {
 		return a
@@ -568,6 +577,7 @@ func min2(a, b int) int {
 	return b
 }
 
+// max2 is the larger of a and b.
 func max2(a, b int) int {
 	if a > b {
 		return a

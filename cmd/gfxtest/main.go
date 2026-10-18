@@ -42,6 +42,7 @@ var (
 
 var logger = log.New(os.Stderr, "", log.Ltime|log.Lmicroseconds)
 
+// main checks -image, opens -log, and serves each connection a traced session.
 func main() {
 	addr := flag.String("addr", ":3270", "the address to listen on")
 	flag.Parse()
@@ -99,6 +100,9 @@ type sess struct {
 	shots    int    // pictures previewed
 }
 
+// session negotiates, logs what the terminal reported (size, cell, every query
+// reply) and runs the menu until PF3 or an error. It assumes 24x80 and a 9x16
+// cell if the terminal reports none.
 func session(c *traceConn) {
 	defer c.Close()
 	logger.Printf("#%d connected from %s", c.id, c.RemoteAddr())
@@ -130,14 +134,19 @@ func session(c *traceConn) {
 	}
 }
 
+// opts is the screen options for the terminal: its alternate screen and code
+// page.
 func (s *sess) opts() go3270.ScreenOpts {
 	return go3270.ScreenOpts{AltScreen: s.dev, Codepage: s.dev.Codepage()}
 }
 
+// text is a protected field: t at row, col in color.
 func text(row, col int, t string, color go3270.Color) go3270.Field {
 	return go3270.Field{Row: row, Col: col, Content: t, Color: color}
 }
 
+// input is an underscored input field, name, width wide at row, col, and the
+// autoskip field that ends it.
 func input(row, col, width int, name string) []go3270.Field {
 	return []go3270.Field{
 		{Row: row, Col: col, Write: true, Name: name, Color: go3270.Green, Highlighting: go3270.Underscore},
@@ -145,6 +154,8 @@ func input(row, col, width int, name string) []go3270.Field {
 	}
 }
 
+// menu shows the menu and the settings, keeps the settings typed (a bad value
+// leaves one as it was) and runs the test chosen; io.EOF on PF3.
 func (s *sess) menu() error {
 	d := s.dev
 	ss := d.SymbolSets()
@@ -253,6 +264,7 @@ func (s *sess) menu() error {
 	return nil
 }
 
+// yn is "Y" for true, "N" for false.
 func yn(b bool) string {
 	if b {
 		return "Y"
@@ -539,6 +551,7 @@ func size(sfs [][]byte) string {
 	return fmt.Sprintf("%d bytes in %d pictures", n, len(sfs))
 }
 
+// blank is h rows of w '.': pels off, to set.
 func blank(w, h int) [][]byte {
 	rows := make([][]byte, h)
 	for i := range rows {
@@ -547,6 +560,7 @@ func blank(w, h int) [][]byte {
 	return rows
 }
 
+// strs is rows as strings, for a Bitmap.
 func strs(rows [][]byte) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
@@ -680,6 +694,7 @@ func writePreview(name, mix string, pal palette, planes []go3270.Bitmap) error {
 	return f.Close()
 }
 
+// loadImage decodes the PNG, JPEG or GIF at path.
 func loadImage(path string) (image.Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -737,6 +752,7 @@ type palette struct {
 	from   string
 }
 
+// rgb is color i's RGB; black if the palette has no color i.
 func (p palette) rgb(i int) color.RGBA {
 	if c, ok := p.colors[i]; ok {
 		return c
@@ -744,6 +760,7 @@ func (p palette) rgb(i int) color.RGBA {
 	return color.RGBA{0, 0, 0, 255}
 }
 
+// String lists the colors, index=rrggbb, for the log.
 func (p palette) String() string {
 	var l []string
 	for i := 0; i < 16; i++ {
@@ -799,6 +816,7 @@ var qcodeNames = map[byte]string{
 	0xFF: "Null",
 }
 
+// qname is QCODE q's query reply name; "?" if unknown.
 func qname(q byte) string {
 	if n, ok := qcodeNames[q]; ok {
 		return n
@@ -806,6 +824,7 @@ func qname(q byte) string {
 	return "?"
 }
 
+// qcodes lists the QCODEs of the replies d sent, in hex.
 func qcodes(d go3270.DevInfo) string {
 	var l []string
 	for _, q := range d.QueryCodes() {
@@ -814,6 +833,7 @@ func qcodes(d go3270.DevInfo) string {
 	return strings.Join(l, " ")
 }
 
+// trunc is s cut to n bytes at most; "" for n <= 0.
 func trunc(s string, n int) string {
 	if n <= 0 {
 		return ""
@@ -837,12 +857,14 @@ type traceConn struct {
 	note string // what the next record out is (for the log)
 }
 
+// mark names the next record written, for the log.
 func (c *traceConn) mark(note string) {
 	c.mu.Lock()
 	c.note = note
 	c.mu.Unlock()
 }
 
+// Write logs each record in p (the mark with it, then cleared) and sends p.
 func (c *traceConn) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	note := c.note
@@ -854,6 +876,8 @@ func (c *traceConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
+// Read reads from the connection and logs each whole record received, and any
+// telnet commands ahead of it; a partial record is kept for the next Read.
 func (c *traceConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	if n > 0 {
@@ -925,6 +949,7 @@ func eor(b []byte) int {
 	return -1
 }
 
+// unescape undoes IAC IAC: each doubled 0xFF made one.
 func unescape(b []byte) []byte {
 	return bytes.ReplaceAll(b, []byte{0xff, 0xff}, []byte{0xff})
 }
@@ -955,6 +980,8 @@ var sfNames = map[byte]string{0x00: "Read Partition", 0x01: "Read Partition (Que
 	0x0d: "Destroy Partition", 0x0e: "Activate Partition", 0x40: "Outbound 3270DS", 0x80: "Outbound Text Header",
 	0x81: "Query Reply", 0x82: "Inbound 3270DS"}
 
+// describeOut is the log's line for a record sent: telnet in hex, or the
+// command, note and length, structured fields listed, the rest dumped with -v.
 func describeOut(rec []byte, note string) string {
 	if len(rec) == 0 {
 		return "(empty)"
@@ -978,6 +1005,8 @@ func describeOut(rec []byte, note string) string {
 	return s
 }
 
+// describeIn is the log's line for a record received: structured fields (AID
+// 0x88) listed, else the AID and length, dumped with -v.
 func describeIn(rec []byte) string {
 	if len(rec) == 0 {
 		return "(empty)"
@@ -1033,6 +1062,8 @@ func structuredFields(b []byte, out bool) string {
 	return strings.Join(lines, "\n")
 }
 
+// sf0F names structured field 0F id (Object Picture, Object Data, ...); "?" if
+// unknown.
 func sf0F(id byte, out bool) string {
 	names := map[byte]string{0x10: "Object Picture", 0x11: "Object Data", 0x1f: "Exception/Status (?)",
 		0x21: "Exception/Status", 0x22: "Inbound Object Picture"}
@@ -1042,6 +1073,8 @@ func sf0F(id byte, out bool) string {
 	return "?"
 }
 
+// picFlags is an Object Picture's flags byte in words: first (0x80), last
+// (0x40), or middle.
 func picFlags(f byte) string {
 	var l []string
 	if f&0x80 != 0 {
@@ -1128,12 +1161,14 @@ func goca(b []byte) []string {
 	return out
 }
 
+// indent puts four spaces ahead of each line of s, a trailing newline dropped.
 func indent(s string) string {
 	return "    " + strings.ReplaceAll(strings.TrimRight(s, "\n"), "\n", "\n    ")
 }
 
 // keep the time import for the log's flags' sake
 
+// imin is the smaller of a and b.
 func imin(a, b int) int {
 	if a < b {
 		return a
@@ -1141,6 +1176,7 @@ func imin(a, b int) int {
 	return b
 }
 
+// imax is the larger of a and b.
 func imax(a, b int) int {
 	if a > b {
 		return a
