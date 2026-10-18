@@ -265,7 +265,7 @@ func dftRequest(conn net.Conn, fields ...[]byte) error {
 	return WriteStructuredFields(conn, append([][]byte{dftWrite}, fields...)...)
 }
 
-// expect sends fields and checks the reply's type.
+// dftExchange sends fields and checks the reply's type.
 func dftExchange(conn net.Conn, timeout time.Duration, want uint16, fields ...[]byte) ([]byte, error) {
 	if err := dftRequest(conn, fields...); err != nil {
 		return nil, err

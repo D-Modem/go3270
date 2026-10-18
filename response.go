@@ -77,7 +77,7 @@ func readResponse(c net.Conn, fm fieldmap, dev DevInfo,
 	}
 	r.AID = aid
 
-	// If the use pressed clear, or a PA key we should return now
+	// If the user pressed clear, or a PA key we should return now
 	// TODO: actually, we should consume the 0xffef, but that will
 	// currently get taken care of in our next AID search.
 	if r.AID == AIDClear || r.AID == AIDPA1 || r.AID == AIDPA2 ||
@@ -234,7 +234,7 @@ func handleField(addr int, value string, fm fieldmap, values map[string]string) 
 // decodeBufAddr decodes a raw 2-byte encoded buffer address and returns the
 // integer value of the address.
 func decodeBufAddr(raw [2]byte) int {
-	// 16-bit addressing
+	// 14-bit addressing (binary, its top two bits 0)
 	if raw[0]&0xc0 == 0 {
 		return int(raw[0])<<8 + int(raw[1])
 	}

@@ -88,7 +88,7 @@ const (
 	binaryOption = 0
 
 	eorOption = 25  // 0x19
-	eor       = 239 // 0xf1
+	eor       = 239 // 0xef
 
 	terminalType     = 24 // 0x18
 	terminalTypeIs   = 0

@@ -77,7 +77,7 @@ func main() {
 // --- the session
 
 type settings struct {
-	origin string // C: 0,0 the middle, y up; B: bottom left, y up; T: top left, y down
+	origin string // C: 0,0 the middle, y up; B: bottom left, y up
 	row    int    // the picture's top left: a character cell
 	col    int
 	size   string // S, M, L
@@ -391,7 +391,9 @@ func (s *sess) show(caption string, x, y int, planes []go3270.Bitmap) error {
 			continue
 		case go3270.AIDPF6:
 			s.c.mark("Erase/Reset")
-			go3270.WriteStructuredFields(s.c, []byte{0x03, 0x00})
+			if err := go3270.WriteStructuredFields(s.c, []byte{0x03, 0x00}); err != nil {
+				return err
+			}
 			continue
 		}
 		return nil
@@ -1039,7 +1041,7 @@ func structuredFields(b []byte, out bool) string {
 		id := sf[0]
 		switch {
 		case id == 0x0f && len(sf) > 1:
-			lines = append(lines, fmt.Sprintf("  SF 0F%02X %s, %d bytes", sf[1], sf0F(sf[1], out), l))
+			lines = append(lines, fmt.Sprintf("  SF 0F%02X %s, %d bytes", sf[1], sf0F(sf[1]), l))
 			if sf[1] == 0x10 && len(sf) >= 5 {
 				lines = append(lines, fmt.Sprintf("    partition %02X, flags %02X (%s)", sf[2], sf[3], picFlags(sf[3])))
 				lines = append(lines, goca(sf[5:])...)
@@ -1064,7 +1066,7 @@ func structuredFields(b []byte, out bool) string {
 
 // sf0F names structured field 0F id (Object Picture, Object Data, ...); "?" if
 // unknown.
-func sf0F(id byte, out bool) string {
+func sf0F(id byte) string {
 	names := map[byte]string{0x10: "Object Picture", 0x11: "Object Data", 0x1f: "Exception/Status (?)",
 		0x21: "Exception/Status", 0x22: "Inbound Object Picture"}
 	if n, ok := names[id]; ok {
@@ -1165,8 +1167,6 @@ func goca(b []byte) []string {
 func indent(s string) string {
 	return "    " + strings.ReplaceAll(strings.TrimRight(s, "\n"), "\n", "\n    ")
 }
-
-// keep the time import for the log's flags' sake
 
 // imin is the smaller of a and b.
 func imin(a, b int) int {
