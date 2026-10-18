@@ -416,3 +416,29 @@ func TestAttributeCharSet(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadPSPlane: a plane of a triple-plane set is the extended form
+// through byte 12, the color plane; format 1's cell is 9x16.
+func TestLoadPSPlane(t *testing.T) {
+	sym := make(Symbol, 16)
+	for i := range sym {
+		sym[i] = "#........"
+	}
+	sf, err := LoadPS{RWS: 5, LCID: 0xc2, First: 0x41, Clear: true, Format: 1, Plane: PlaneRed,
+		Symbols: []Symbol{sym}}.StructuredField()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{0x06, 0x80 | 0x40 | 1, 0xc2, 0x41, 5, 6, 0, 9, 16, 0, PlaneRed, 0xff, 0xff}
+	if !bytes.Equal(sf[:len(want)], want) || len(sf) != 11+18 {
+		t.Errorf("% x", sf)
+	}
+	sf, _ = LoadPS{RWS: 5, LCID: 0xc2, First: 0x41, Format: 3, Width: 8, Height: 12, Extended: true, Plane: PlaneGreen,
+		Symbols: []Symbol{sym[:12]}}.StructuredField()
+	if want := []byte{0x06, 0x83, 0xc2, 0x41, 5, 6, 0, 8, 12, 0, PlaneGreen}; !bytes.Equal(sf[:len(want)], want) {
+		t.Errorf("format 3: % x", sf)
+	}
+	if _, err := (LoadPS{LCID: 0xc2, First: 0x41, Format: 1, Plane: 3}).StructuredField(); err == nil {
+		t.Error("plane 3 taken")
+	}
+}

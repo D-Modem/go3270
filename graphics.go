@@ -257,8 +257,22 @@ type LoadPS struct {
 	// Width and Height (SymbolSets.Extended must be true).
 	Extended bool
 
+	// Plane is the plane of a triple-plane (color) set the symbols are
+	// loaded into: PlaneBlue, PlaneRed or PlaneGreen; 0, all three (or a
+	// single-plane set). A plane needs the extended form, which it implies.
+	// A cell shows its planes' colors, added (blue and red make pink...),
+	// where its color attribute is White (neutral, X'F7'), GA23-0059 4.5.
+	Plane byte
+
 	Symbols []Symbol
 }
+
+// The planes of a triple-plane symbol set, for LoadPS.Plane.
+const (
+	PlaneBlue  byte = 1
+	PlaneRed   byte = 2
+	PlaneGreen byte = 4
+)
 
 // StructuredField is the Load PS structured field, from its SFID on, for
 // WriteStructuredFields.
@@ -271,6 +285,11 @@ func (l LoadPS) StructuredField() ([]byte, error) {
 	}
 	if int(l.First)+len(l.Symbols)-1 > 0xfe {
 		return nil, errors.New("go3270: Load PS: more symbols than code points")
+	}
+	switch l.Plane {
+	case 0, PlaneBlue, PlaneRed, PlaneGreen:
+	default:
+		return nil, fmt.Errorf("go3270: Load PS plane %#x is not blue, red or green", l.Plane)
 	}
 	flags := byte(0)
 	if l.Clear {
@@ -325,13 +344,24 @@ func (l LoadPS) StructuredField() ([]byte, error) {
 				data.WriteByte(byte(acc << (8 - n)))
 			}
 		}
-		if l.Extended {
+		if l.Extended || l.Plane != 0 {
 			// parameters' length (itself included), flags, LW, LH
 			ext = []byte{4, 0, byte(w), byte(h)}
-			flags |= 0x80
 		}
 	default:
 		return nil, fmt.Errorf("go3270: Load PS format %d is not supported here", l.Format)
+	}
+	if l.Plane != 0 {
+		// GA23-0059 5.13.2: through the color planes (byte 12), after the
+		// subsection ID (one-byte codes); format 1's cell is 9 by 16
+		if ext == nil {
+			ext = []byte{4, 0, 9, 16}
+		}
+		ext = append(ext, 0, l.Plane)
+		ext[0] = byte(len(ext))
+	}
+	if ext != nil {
+		flags |= 0x80
 	}
 	sf := []byte{0x06, flags, l.LCID, l.First, l.RWS}
 	sf = append(sf, ext...)
