@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 // init is where go3270's debug output can be turned on: uncomment the line (and

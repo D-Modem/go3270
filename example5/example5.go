@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 // main listens on port 3270 and handles each connection in its own goroutine.

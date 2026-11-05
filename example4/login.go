@@ -12,7 +12,7 @@ package main
 import (
 	"net"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 const loginUsername = "username"

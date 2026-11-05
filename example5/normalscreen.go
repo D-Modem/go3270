@@ -9,7 +9,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 var normallayout = go3270.Screen{
