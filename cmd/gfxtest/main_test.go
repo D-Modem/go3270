@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 // pcomm is part of IBM Personal Communications' palette.

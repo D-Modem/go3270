@@ -12,7 +12,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 type global struct {

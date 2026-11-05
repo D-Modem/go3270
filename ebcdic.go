@@ -4,7 +4,7 @@
 
 package go3270
 
-import "github.com/racingmars/go3270/internal/codepage"
+import "github.com/D-Modem/go3270/internal/codepage"
 
 // Implementations of Codepage provide EBCDIC<->UTF-8 translation. By default,
 // go3270 is configured to use CP 1047. You may alternatively set a different

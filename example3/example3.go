@@ -12,7 +12,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/racingmars/go3270"
+	"github.com/D-Modem/go3270"
 )
 
 var screen = go3270.Screen{
