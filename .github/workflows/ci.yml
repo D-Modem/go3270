@@ -1,0 +1,127 @@
+# build: on Go 1.18 (go.mod's go line, the oldest it promises) and the
+# suite's current toolchain (bbs's go.mod): the build, go vet and the tests
+# with the race detector; on the current one also gofmt, go.mod and go.sum
+# tidy, and tools/apiref (its own module) built and vetted.
+#
+# bbs: bbs's main built, vetted and tested against this checkout of
+# go3270 (go mod edit -replace): bbs's 3270 server is built on it, so a
+# change here that breaks bbs fails here, not after bbs next updates.
+#
+# A change to docs alone runs nothing: the Markdown, docs/, the site's
+# files (pages.yml builds them).  (paths, not paths-ignore, so that a
+# later one can take a file back.)  A push runs it on main alone (a
+# branch's commits run it as its pull request, not twice), or by hand
+# (workflow_dispatch); a newer push to a pull request cancels its older run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**.md'
+      - '!LICENSE'
+      - '!mkdocs.yml'
+      - '!.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**.md'
+      - '!LICENSE'
+      - '!mkdocs.yml'
+      - '!.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build (Go ${{ matrix.go }})
+    runs-on: ubuntu-24.04
+    # (a hung test ends here, not at GitHub's 6 hours)
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.18", "1.24.7"]
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: gofmt
+        if: matrix.go != '1.18'
+        run: |
+          out=$(gofmt -l .)
+          [ -z "$out" ] || { echo "::error::not gofmt'd (gofmt -w .):"; echo "$out"; exit 1; }
+
+      - name: go.mod and go.sum tidy
+        if: matrix.go != '1.18'
+        run: |
+          go mod tidy -diff
+          (cd tools/apiref && go mod tidy -diff)
+
+      - name: Build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Tests (race detector)
+        run: go test -race ./...
+
+      - name: tools/apiref
+        if: matrix.go != '1.18'
+        working-directory: tools/apiref
+        run: |
+          go build ./...
+          go vet ./...
+
+  bbs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOPRIVATE: github.com/D-Modem/*
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: go3270
+
+      - uses: actions/checkout@v6
+        with:
+          repository: D-Modem/bbs
+          path: bbs
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: bbs/go.mod
+          cache-dependency-path: bbs/go.sum
+
+      - name: bbs against this go3270
+        working-directory: bbs
+        run: |
+          go mod edit -replace github.com/D-Modem/go3270=../go3270
+          go mod tidy
+
+      - name: Build
+        working-directory: bbs
+        run: go build ./...
+
+      - name: go vet
+        working-directory: bbs
+        run: go vet ./...
+
+      - name: Tests
+        working-directory: bbs
+        run: go test ./...
