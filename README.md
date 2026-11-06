@@ -1,3 +1,5 @@
+<img src=".github/banner.png" alt="D-Modem/go3270: Go servers for 3270 terminals" width="100%">
+
 # go3270
 
 A Go library for writing TN3270 servers: build 3270 data streams from
