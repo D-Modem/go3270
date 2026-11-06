@@ -30,6 +30,8 @@ then see `example1` to `example5`; `example4` shows the recommended
 
 ## Documentation
 
+The documentation is also a website, [d-modem.github.io/go3270](https://d-modem.github.io/go3270/), with reference pages made from the code.
+
 - [docs/](docs/README.md): usage, code pages, graphics and IND$FILE, references
 - [API reference](https://pkg.go.dev/github.com/D-Modem/go3270)
 
