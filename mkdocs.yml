@@ -1,0 +1,20 @@
+INHERIT: .site/mkdocs-base.yml
+# go3270's site, https://d-modem.github.io/go3270/: docs/ and the README
+# with brand's shared theme and workflow (brand's docs/sites.md).
+# docs/api.md is made from the doc comments (cd tools/apiref && go run . ../.. ../../docs/api.md).
+site_name: D-Modem go3270
+site_description: A Go library for writing TN3270 servers
+site_url: https://d-modem.github.io/go3270/
+repo_url: https://github.com/D-Modem/go3270
+repo_name: D-Modem/go3270
+docs_dir: .site/docs
+extra:
+  repo: go3270
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - Code pages: codepages.md
+  - Graphics and IND$FILE: graphics.md
+  - API reference: api.md
+  - References: references.md
+  - Documentation index: README.md

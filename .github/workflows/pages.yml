@@ -1,0 +1,25 @@
+# go3270's site, https://d-modem.github.io/go3270/: docs/ and the README
+# with brand's shared theme and workflow (brand's docs/sites.md).  A pull
+# request builds it, main deploys it.  It fails if docs/api.md isn't what
+# the doc comments make now (tools/apiref).
+name: Pages
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  site:
+    uses: D-Modem/brand/.github/workflows/site.yml@main
+    with:
+      go-version: "1.24"
+      prepare: |
+        (cd tools/apiref && go run . ../.. ../../docs/api.md)
+        git diff --exit-code docs/api.md || { echo "::error::docs/api.md is out of date: cd tools/apiref && go run . ../.. ../../docs/api.md"; exit 1; }
