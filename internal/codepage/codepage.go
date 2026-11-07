@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-only AND MIT
+// From https://github.com/racingmars/go3270/: Copyright 2020, 2025 by
+// Matthew R. Wilson, under the MIT license (LICENSE-MIT in the project
+// root).  D-Modem's changes: Copyright (C) 2026 D-Modem Authors, under
+// the AGPL-3.0-only (LICENSE).
+
 package codepage
 
 import "unicode/utf8"

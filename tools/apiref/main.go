@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 D-Modem Authors
+
 // SPDX-License-Identifier: MIT
 //
 // apiref writes docs/api.md, the API reference of the site, from the
