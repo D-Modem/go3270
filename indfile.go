@@ -1,6 +1,5 @@
-// This file is part of https://github.com/racingmars/go3270/
-// Copyright 2026 by the go3270-sec contributors, licensed under the MIT
-// license. See LICENSE in the project root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 D-Modem Authors
 
 package go3270
 

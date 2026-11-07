@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 D-Modem Authors
+
 // Command gfxtest is a TN3270 server for debugging 3270 graphics on an
 // emulator: it shows what the terminal reported (its query replies), draws
 // vector bitmaps (Object Picture structured fields, GDDM-style image

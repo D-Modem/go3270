@@ -49,4 +49,4 @@ The documentation is also a website, [d-modem.github.io/go3270](https://d-modem.
 
 ## Licence
 
-MIT, as upstream; see [LICENSE](LICENSE). Contributions come with a contributor agreement ([CONTRIBUTING.md](CONTRIBUTING.md)).
+AGPL-3.0-only ([LICENSE](LICENSE)), or a commercial licence from the D-Modem Authors ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The code from upstream stays under its MIT licence ([LICENSE-MIT](LICENSE-MIT)) as well; each file's `SPDX-License-Identifier` line says which it holds. Contributions come with a contributor agreement ([CONTRIBUTING.md](CONTRIBUTING.md)).

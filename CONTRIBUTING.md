@@ -5,9 +5,11 @@ sending a change, run `gofmt -l .`, `go vet ./...` and `go test -race ./...`.
 
 ## The contributor agreement
 
-go3270 is under the MIT License ([LICENSE](LICENSE)), as upstream.  So
-that the D-Modem Authors can offer it under that and other terms, and
-send changes upstream, each contribution comes with this agreement.
+go3270 is offered under the AGPL-3.0 and, by the D-Modem Authors, under
+commercial licenses ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)); its
+code from upstream also stays under the MIT License.  For contributions
+to be part of all of them, and to be sendable upstream, each one comes
+with this agreement.
 By submitting a contribution (a pull request, a patch or
 any other code or text meant for inclusion), you agree that:
 
@@ -21,7 +23,7 @@ any other code or text meant for inclusion), you agree that:
    perpetual, worldwide, non-exclusive, no-charge, royalty-free,
    irrevocable license to use, copy, modify, publicly display and
    perform, sublicense and distribute your contribution and works based
-   on it, under the MIT License and under any other terms, commercial
+   on it, under the AGPL-3.0, the MIT License and under any other terms, commercial
    licenses included.
 4. You grant the same parties a license, on the same terms, under any
    patent claims of yours that your contribution would infringe, to

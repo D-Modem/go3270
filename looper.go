@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: MIT
 // This file is part of https://github.com/racingmars/go3270/
-// Copyright 2020 by Matthew R. Wilson, licensed under the MIT license. See
-// LICENSE in the project root for license information.
+// Copyright 2020 by Matthew R. Wilson, licensed under the MIT license.
+// See LICENSE-MIT in the project root for license information.
 
 package go3270
 
