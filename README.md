@@ -49,4 +49,4 @@ The documentation is also a website, [d-modem.github.io/go3270](https://d-modem.
 
 ## Licence
 
-MIT, as upstream; see [LICENSE](LICENSE).
+MIT, as upstream; see [LICENSE](LICENSE). Contributions come with a contributor agreement ([CONTRIBUTING.md](CONTRIBUTING.md)).
