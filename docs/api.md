@@ -2,7 +2,7 @@
 
 # API reference
 
-Package `go3270`'s exported API, from its doc comments (what `go doc -all` and [pkg.go.dev](https://pkg.go.dev/github.com/D-Modem/go3270) show).
+The exported API of package `go3270`, from its doc comments (the same text that `go doc -all` and [pkg.go.dev](https://pkg.go.dev/github.com/D-Modem/go3270) show).
 
     import "github.com/D-Modem/go3270"
 

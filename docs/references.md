@@ -1,6 +1,11 @@
 # 3270 references
 
-I started learning about 3270 data streams from [Tommy Sprinkle's tutorial][sprinkle]. The tn3270 telnet negotiation is gleaned from [RFC 1576: TN3270 Current Practices][rfc1576], [RFC 1041: Telnet 3270 Regime Option][rfc1041], and [RFC 854: Telnet Protocol Specification][rfc854]. The IANA maintains a [useful reference of telnet option numbers][telnetOptions]. The reference I use for 3270 data streams is [the 1981 version from IBM][ibmref].
+The library is built from these references:
+
+- The first source for 3270 data streams: [Tommy Sprinkle's tutorial][sprinkle].
+- The tn3270 telnet negotiation: [RFC 1576: TN3270 Current Practices][rfc1576], [RFC 1041: Telnet 3270 Regime Option][rfc1041], and [RFC 854: Telnet Protocol Specification][rfc854].
+- The telnet option numbers: a [useful reference of telnet option numbers][telnetOptions] from the IANA.
+- The reference for 3270 data streams: [the 1981 version from IBM][ibmref].
 
 [sprinkle]: http://www.tommysprinkle.com/mvs/P3270/
 [rfc1576]: https://tools.ietf.org/html/rfc1576
