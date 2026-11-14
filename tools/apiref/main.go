@@ -66,8 +66,8 @@ func reference(dir string) ([]byte, error) {
 	r := &writer{fset: fset, pkg: pkg}
 	r.printf("<!-- Made by tools/apiref from the package's doc comments: change the code, not this page. -->\n\n")
 	r.printf("# API reference\n\n")
-	r.printf("Package `%s`'s exported API, from its doc comments (what `go doc -all` "+
-		"and [pkg.go.dev](https://pkg.go.dev/github.com/D-Modem/go3270) show).\n\n", name)
+	r.printf("The exported API of package `%s`, from its doc comments (the same text "+
+		"that `go doc -all` and [pkg.go.dev](https://pkg.go.dev/github.com/D-Modem/go3270) show).\n\n", name)
 	r.printf("    import \"%s\"\n\n", pkg.ImportPath)
 	r.text(pkg.Doc)
 

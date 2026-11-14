@@ -2,19 +2,20 @@
 
 # go3270
 
-A Go library for writing TN3270 servers: build 3270 data streams from
-fields and read back the attention key and the values the user typed.
+A Go library to write TN3270 servers. It builds 3270 data streams from
+fields. It reads back the attention key and the values that the user typed.
 
-This is the D-Modem suite's fork of [racingmars/go3270](https://github.com/racingmars/go3270)
-by Matthew R. Wilson, kept API-compatible with it. [bbs](https://github.com/D-Modem/bbs)
-uses it for its TN3270 callers.
+This is the fork of [racingmars/go3270](https://github.com/racingmars/go3270)
+by Matthew R. Wilson for the D-Modem suite. Its API stays compatible with the
+API of racingmars/go3270. [bbs](https://github.com/D-Modem/bbs) uses it for
+its TN3270 callers.
 
 - Screens from fields, with `ShowScreenOpts()`, `HandleScreen()` and `RunTransactions()`
-- Telnet negotiation, terminal size detection and larger-than-24x80 screens
-- 31 EBCDIC code pages, detected from the client, plus graphic escape (code page 310)
-- In this fork: every query reply kept, programmed symbols, native 3270 vector graphics and images
-- In this fork: IND$FILE file transfer (DFT), the host's side
-- `cmd/gfxtest`, a TN3270 server for trying graphics on an emulator
+- Telnet negotiation, detection of the terminal size, and screens larger than 24x80
+- 31 EBCDIC code pages, detected from the client, and graphic escape (code page 310)
+- In this fork: the library keeps all query replies. Programmed symbols, native 3270 vector graphics and images
+- In this fork: IND$FILE file transfer (DFT), the side of the host
+- `cmd/gfxtest`, a TN3270 server to try graphics on an emulator
 
 ## Quick start
 
@@ -24,9 +25,9 @@ uses it for its TN3270 callers.
 import "github.com/D-Modem/go3270"
 ```
 
-then see `example1` to `example5`; `example4` shows the recommended
-`RunTransactions()` structure. Code that imported
-`github.com/racingmars/go3270` changes only its import path.
+Then refer to `example1` to `example5`. `example4` shows the recommended
+`RunTransactions()` structure. If your code imported
+`github.com/racingmars/go3270`, change only its import path.
 
 ## Documentation
 
@@ -34,6 +35,7 @@ The documentation is also a website, [d-modem.github.io/go3270](https://d-modem.
 
 - [docs/](docs/README.md): usage, code pages, graphics and IND$FILE, references
 - [API reference](https://pkg.go.dev/github.com/D-Modem/go3270)
+- [Documentation style](docs/STYLE.md): the rules for ASD-STE100 Simplified Technical English
 
 ## The D-Modem suite
 
@@ -49,4 +51,4 @@ The documentation is also a website, [d-modem.github.io/go3270](https://d-modem.
 
 ## Licence
 
-AGPL-3.0-only ([LICENSE](LICENSE)), or a commercial licence from the D-Modem Authors ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The code from upstream stays under its MIT licence ([LICENSE-MIT](LICENSE-MIT)) as well; each file's `SPDX-License-Identifier` line says which it holds. Contributions come with a contributor agreement ([CONTRIBUTING.md](CONTRIBUTING.md)).
+AGPL-3.0-only ([LICENSE](LICENSE)), or a commercial licence from the D-Modem Authors ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The code from upstream stays under its MIT licence ([LICENSE-MIT](LICENSE-MIT)) as well. The `SPDX-License-Identifier` line of each file tells which licence applies to it. Contributions come with a contributor agreement ([CONTRIBUTING.md](CONTRIBUTING.md)).
